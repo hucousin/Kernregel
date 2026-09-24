@@ -851,6 +851,7 @@ zeig 42, 1                      // multiple‑argument print comma‑separated v
 zeig "\n newline;\t tab;\r carriage‑return;\b backspace;"
 zeigIn(stderg, "Result: ", 42)  // write to stdout stream
 zeigIn(stdfehl, "Error: Division by zero") // write text to stderr error stream
+zeigIn(stderg, "", fals)        // Optional third parameter, whether to refresh
 schrIn()
 loesch()                        // erase stored output lines from current scope
 zeigAlle()                      // dump stored output lines; optional flags for redraw / show‑line‑numbers
