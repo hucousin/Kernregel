@@ -1,0 +1,1840 @@
+/|
+| Kernregel(.kr) Sprachgrammatik‑Beispiele
+| C++ VM‑Typ
+| Die auskommentierten Codes können nach Entfernen der Kommentare verwendet werden (sie sind nur bei Tests auskommentiert, um überflüssige Ausgaben zu vermeiden)
+| Funktions‑ und Variablennamen unterstützen Unicode‑Zeichen
+| Halten Sie sich zur einheitlichen Syntax möglichst an die voreingestellten Schlüsselwörter, vermeiden Sie optionale Schlüsselwörter
+| Kr unterstützt die Einrückungssyntax (jede Einrückung größer als die des übergeordneten Blocks ist gültig), halten Sie den Stil konsistent; wenn der übergeordnete Block geschweifte Klammern verwendet, müssen untergeordnete Blöcke ebenfalls Klammern verwenden, sonst kommt es zu Syntaxfehlern; lexikal unterstützt keine Einrückungssyntax (Präprozessor duldet keine Mehrdeutigkeiten)
+| Kr nutzt Funktionsgültigkeitsbereiche; die Iteration „für jedes“ erzeugt einen neuen lokalen Gültigkeitsbereich, andere Schleifenanweisungen nicht.
+| Abgesehen von Speicheroperationen ist jeder Kern‑Code gültiger Kernregel‑Code, Ausführungsergebnisse sind nahezu identisch, die interne Logik unterscheidet sich jedoch deutlich
+| Es gibt Visual‑Studio‑Code‑Syntax‑Hervorhebung sowie lexikal‑basierte semantische Hervorhebungs‑Erweiterungen; die semantische Hervorhebung ruft bei Bedarf den Kr‑Interpreter auf, um AST‑ und Lexik‑Informationen abzurufen und Fehlermeldungen sowie Detailinformationen zu Bezeichnern bereitzustellen
+|
+| Ohne Optimierung: Leere Schleife mit einer Million Iterationen dauert ca. 4 ms; Schleife mit einer Inkrement‑Anweisung im Rumpf ca. 17 ms, entspricht etwa hundert Millionen VA‑Schleifendurchläufen
+| Warnung ab v0.0.19xx: Der VM‑Modus kann weniger stabil sein als der reine Interpreter‑Modus
+|
+| Projekt gestartet am: 2026.06.28
+|/
+// ============================================================================
+// Ausführungsbefehle
+// ============================================================================
+/|
+kr <Datei.kr>                   // Datei öffnen und ausführen
+kr --opt                        // benutzerdefinierte Ausführungsoptionen
+kr --verf                       // AST zur Lauf‑ / Kompilierzeit ausgeben
+kr --lex                        // Nur bis zur Parsing‑Phase ausführen, JSON‑Fehlerinformationen, Präprozessor‑Makro‑Definitionen und weitere Daten zurückliefern
+kr -k                           // Direkte Eingabemodus (schnelle Berechnungen, nicht empfohlen)
+kr -p                           // Pfad zum Verzeichnis von kr.exe ermitteln
+kr -w                           // Warnungen aktivieren
+kr -v <N> -n <M>                // Anzahl der angezeigten Fehlerkontext‑Zeilen festlegen
+kr -t                           // Ausführungszeit messen und ausgeben
+kr -O                           // Optimierungen einschalten
+kr -i                           // Reiner AST‑Interpreter‑Modus
+kr -d                           // DEBUG-Modus, das DEBUG-Makro wird automatisch auf 1 definiert
+// benutzerdefinierte Ausführungsoptionen
+--opt "{haupt: main}"                       // Haupt‑Einstiegspunkt auf Funktion main festlegen; danach wird main automatisch aufgerufen, ohne expliziten Aufruf im Quelltext
+--opt "{haupt: main, args: [42, \"welt\", true]}" // Aufruf mit Parametern
+--opt "{haupt: main, klass: Main}"          // Haupt‑Einstiegspunkt: statische main‑Methode innerhalb der Klasse Main
+--opt "{ast: wahr}"                         // Alle AST‑Knoten ausgeben, ohne Programm auszuführen
+--opt "{ast: {st: 8, end: 8}}"              // AST‑Knoten einer bestimmten Zeile ausgeben, ohne Ausführung
+|/
+// ============================================================================
+// Befehlszeilen‑Parameter
+// ============================================================================
+/|
+| Beim Ausführen eines Kr‑Skripts können beliebig viele durch Leerzeichen getrennte Parameter hinter dem Skriptnamen übergeben werden.
+| Diese werden automatisch in zwei globale schreibgeschützte Konstanten eingetragen:
+|
+|   arga  – Ganzzahl, Anzahl der übergebenen Parameter (ohne Programm‑ und Skriptdateiname)
+|   argw  – String‑Array, jeder Eintrag entspricht einem übergebenen Parameter, Index beginnt bei 0
+|
+| Hinweis: arga und argw sind Konstanten, sie können nicht neu zugewiesen werden.
+|
+| Beispiel Befehlszeile: kr test.kr a b "c d"
+| Dann gilt: arga = 3, argw = ["a", "b", "c d"], fname() = "test.kr"
+|
+| Lässt sich mit --opt kombinieren:
+|   kr test.kr --opt "{haupt: main}" arg1 arg2
+|   In diesem Fall wird main aufgerufen, arga und argw enthalten weiterhin arg1 und arg2.
+|
+| Beispielverwendung
+|   fkt main() {
+|       zeig "Skriptname: ", argw[0]
+|       fa arga > 0 {
+|           zeig "Erster Parameter: ", argw[1]
+|       }
+|       für i in 0..arga-1 {
+|           zeig "argw[", i, "] = ", argw[i]
+|       }
+|   }
+|/
+// ============================================================================
+// Variablen‑Deklaration (Variable, Konstante, faule Variable)
+// ============================================================================
+der x = 10                      // veränderliche Variable
+der zl: zahl = 10               // Typ‑Annotation
+der var                         // Variable anlegen, Standardwert null
+der var: gzl                    // als Ganzzahl typisiert initialisiert (zahl und gzl haben im Wesentlichen gleiche Bedeutung)
+gzl var                         // Präfix‑Schreibweise (funktioniert nicht mit Destrukturierung oder Mehrfachzuweisung)
+das π = 3.14159                 // Konstante
+faul lazy = 2 + 3               // faule Variable (Ausdruck wird erst bei erstem Zugriff ausgewertet)
+des m = x                       // Alias‑Bezeichnung
+der obj = { "link": 5, "recht": 7 }
+der link, recht = obj           // Objekt‑Destrukturierung; entspricht der Anweisung der link = obj.link, recht = obj.recht
+der a = 1, b = 2                // Mehrfach‑Zuweisung
+der arr = [ 1, 2, 3, 4 ]
+a <-> b                         // Werte zweier Variablen tauschen
+global g = 1                    // globaler Gültigkeitsbereich (auf oberster Ebene sind Definitionen standardmäßig global)
+global a <-> b
+global {                        // globaler Gültigkeits‑Block, Einrückungssyntax erlaubt
+    der a = 1, b = 2
+    fa 1 < 0 {
+        a = 2; b = 3
+    }
+}
+nutz x, zl                      // markiert Variable / Konstante / Funktion als verwendet, um Warnungen für ungenutzte Bezeichner zu unterdrücken
+nutz _                          // markiert alle bis zu dieser Stelle definierten Größen als benutzt; üblicherweise in Bibliotheksdateien
+/|
+| Kr erlaubt implizite Variablen‑Deklaration durch einfache Zuweisung ohne der/das; neu angelegte Variablen sind veränderlich.
+| Fehlt das global‑Präfix, gilt die Variable nur im aktuellen Block bzw. der aktuellen Funktion.
+| Für Konstanten ist das Schlüsselwort das zwingend erforderlich.
+|/
+x = 20                          // Zuweisung (ist ist ein Synonym)
+x ist 30
+x += 5                          // kombinierte Zuweisung
+x -= 2
+x *= 3
+x /= 2
+x %= 4
+x ^= 2                          // Potenz
+x |= 1
+x &= 2
+x ~= 2                          // XOR‑Bitoperation
+s = "Hallo"; h = "Welt"
+str = "  Hallo Welt!  "
+// ============================================================================
+// Grunddatentypen
+// ============================================================================
+ganzzahl = 42                   // Ganzzahl
+fliesskzl = 3.14                // Gleitkommazahl
+Xz = 0x1.1p2                    // Hexadezimalschreibweise, unterstützt Gleitkommazahlen und Exponenten
+Oz = 0o1                        // Oktalschreibweise
+Bz = 0b1                        // Binärschreibweise
+Text = "Hallo"                  // Zeichenkette
+u_Text = u"\nabc{}\t"           // Roh‑Zeichenkette: keine Escape‑Sequenzen, keine Interpolation, selbst Anführungszeichen lassen sich nicht escapen; einfache und Backtick‑Anführungszeichen sind ebenfalls möglich
+b_Text = b"\x19\x11"            // Binär‑Zeichenkette → ergibt Ganzzahl‑Array [0x19, 0x11]; weitere Anführungszeichen‑Varianten erlaubt
+e_Text = e"Delete"              // ANSI‑Escape‑Zeichenkette; weitere Anführungszeichen‑Varianten erlaubt
+Einz = 'e'                      // Einzelzeichen; wird bei Berechnungen zu Zahl 0‑255; bei mehr als einem Zeichen ist es eine normale Zeichenkette
+leererText = ""
+leererEinz = ''                 // leeres einfaches Anführungszeichen liefert den Wert "0"
+Backtick = `\` \\`              // Backtick‑Zeichenkette: nur Backtick, Backslash und & dürfen escaped werden, sonst unveränderter Text außer Interpolation
+array = [1, 2, 3]               // Array
+leeresArray = []
+objekt = { "name": "Max", "alter": 30, "beruf": "Ingenieur" }  // Objekt; Schlüssel können Bezeichner oder Strings sein; nicht‑String‑Schlüssel werden als Variablen ausgewertet; Zugriff per Bezeichner funktioniert auch für String‑Schlüssel
+leeresObjekt = {}
+nichts = null                   // Null‑Wert
+// ============================================================================
+// Ausdrücke und Operatoren
+// ============================================================================
+// Ternärer Bedingungsoperator
+val = (x > 10) ? 100 : 200
+// Logische Operationen (UND, OD, NICH oder und, od, nich)
+fa a > 0 und b < 20 { }         // und entspricht logischem UND, alternativ &&
+fa a > 0 od b < 20 { }          // od entspricht logischem ODER, alternativ ||
+fa nich (a > 0) { }             // nich entspricht logischer Negation, alternativ !
+// Rechen‑ und Vergleichsoperatoren
+1 > 0                           // größer als
+1 < 2                           // kleiner als
+1 == 1                          // gleich
+1 + 1                           // Addition
+1 - 1                           // Subtraktion
+1 * 1                           // Multiplikation
+1 / 1                           // Division
+1.0 / 1                         // Gleitkommadivision, maximale Genauigkeit 1024 Bit
+1 + 1 * 2                       // Punktrechnung vor Strichrechnung
+2 * (1 + 1)                     // Klammern
+10 % 3                          // Modulo‑Restbildung
+1 ^ 2                           // Potenz (rechtsassoziativ; bindet stärker als negatives Vorzeichen, also: (-2) ^ 2 verwenden)
+1 | 2                           // Bit‑ODER
+1 & 2                           // Bit‑UND
+1 << 2                          // Linksverschiebung
+1 >> 2                          // Rechtsverschiebung
+1 ~ 2                           // Bit‑Negation
+1 ~~ 2                          // Bit‑XOR
+1!                              // Fakultät
+1!!                             // Doppelfakultät
+1°                              // Grad‑Umrechnung: x ° = x * π / 180
+1 + -1                          // negative Zahl
+1 <=> 1                         // Drei‑Wege‑Vergleich
+1.2e+3                          // wissenschaftliche Notation
+// Pipe‑Operator |> : linken Ausdruck als erstes Argument der rechten Funktion übergeben
+cleaned = "  Hallo Welt!  " |> trim() |> ers(/Welt/, "Erde")
+// entspricht ers(trim("  Hallo Welt!  "), /Welt/, "Erde")
+// Null‑Kombinierer ??
+maybe = null
+result = maybe?.prop ?? "default"   // falls maybe null oder die Eigenschaft nicht existiert, Standardwert verwenden
+// Optionaler Zugriff ?.
+addr = { "address": { "city": "Berlin" } }
+// zeig addr?.address?.city ?? "unbekannt"
+// ============================================================================
+// Kontrollfluss‑Anweisungen
+// ============================================================================
+fa x > 15 || (x < 15 && x != 20) || x == 1 {
+    // Bedingung erfüllt
+} snfa x == 15 {
+    // else‑if‑Zweig
+} sonst {
+    // else‑Zweig
+}
+fa x in 1, 2 { }                // entspricht x == 1 || x == 2
+/|
+// Hinweis: die folgenden Schreibweisen sind zulässig aber nicht empfohlen
+fa x in 1 dann null             // dann leitet einen Anweisungsrumpf ein, hat aber wenig praktischen Nutzen
+fa x in 1 null                  // Rumpf kann auch direkt folgen
+fkt TestFunk() dann             // dann ist hier zwingend nötig, um Einrückung und Block voneinander abzugrenzen
+    {"x": 1}                    // Objekt kann zurückgegeben werden, aber gib ist empfohlen, korrekt: gib {"x": 1}
+|/
+indes x > 0 {
+    x -= 1
+}
+// mindestens einmal ausführen bis Eingabe "ja" erfolgt
+/|
+tu {
+    zeig "Weiter? (ja/nein): "
+    lies antwort
+} indes antwort != "ja"
+|/
+// klassische for‑Schleife
+für i = 0; i < 5; i++ {
+    fa i == 2 { weiter }        // continue‑Sprung: nächster Schleifendurchlauf
+    fa i == 3 { bruch }         // break‑Sprung: Schleife verlassen
+}
+// Bereichs‑Iteration mit in … .. [sch]; ..‑Bereich kann auch bis geschrieben werden
+für i in 0..10 sch 2 {
+    // i durchläuft 0,2,4,6,8,10
+}
+// Array‑Iteration
+zahlen = [100, 200, 300]
+für w in zahlen {
+    // w nacheinander 100, 200, 300
+}
+// Objekt‑Iteration über Schlüssel‑Wert‑Paare
+obj = { "x": 10, "y": 20 }
+für k, w in obj {
+    // k = Schlüssel, w = zugehöriger Wert
+}
+// Sprung aus geschachtelten Schleifen
+für i in 1..5
+    für j in 1..4
+        fa j == 2 weiter 2      // zwei Schleifenebenen weiter‑Sprung
+        fa j == 3 bruch 2       // zwei Schleifenebenen abbrechen
+// ============================================================================
+// Funktionsdefinitionen (normal, memoisiert, asynchron)
+// ============================================================================
+// normale Funktion
+fkt addiere(a = 1, b) {         // Parameter können direkt mit Standardwerten belegt werden
+    a + b                       // Letzter Ausdruck dient als Rückgabewert ohne gib; um Rückgabe zu unterdrücken, leer‑Modifikator verwenden
+    gib                         // leeres gib liefert null zurück; Semikolon oder schließende geschweifte Klammer sind erforderlich
+}
+// Einrückungs‑Syntax (stabil, konsistenter Stil empfohlen)
+fkt einzug()
+    für i in 0..2
+        gib 3
+    ver
+        fa x == 1
+            null                // entspricht pass‑Platzhalter, kann auch leer bleiben
+        snfa x > 0
+            gib 2
+        sonst
+            dem 0
+    den fehl
+        zeig fehl
+fkt gibeinzug()
+    fa 1
+        gib                     // leere Rückgabe, nachfolgende Zeile ist leer → kein Semikolon nötig
+    // x + 1                    // dieser Ausdruck wird nicht als Rückgabe erkannt wegen zu geringer Einrückung, Rückgabe ist null
+    gib(
+        x + 1                   // bei Klammerung spielt die Einrückung keine Rolle
+    )
+// variable Anzahl von Parametern (&args oder ...args)
+fkt printf(result, &args) {
+    out = result
+    fa args == null {
+        zeig out
+        gib ""
+    }
+    für i in 0..args.län -1 {
+        elem = args[i]
+        fa elem == null {
+            str = "null"
+        } sonst {
+            str = elem.alt(".0k")
+        }
+        out = out.ers("%d", str)
+    }
+    zeig out
+}
+// benutzerdefinierte Namensräume mit umf
+umf "B" {
+    xx = 10
+}
+umf "A" von "B" {
+    // zeig xx                  // gibt 10 aus, erbt aus übergeordnetem Namensraum B
+    yy = xx + 5
+}
+// zeig umf("A").yy             // Ausgabe 15
+// Import aus Namensraum
+{ xx, yy } = umf("A")
+// zeig xx + yy                 // Ausgabe 25
+// Namensraum‑Stil
+umf Namensraum {
+fkt fn() {}
+r = 1
+}
+Namensraum.fn()                 // Aufruf über Namensraum‑Präfix
+umf Namensraum                  // Namensraum‑Inhalte in aktuellen Gültigkeitsbereich importieren
+fn()                            // direkter Aufruf
+// Sprung aus Gültigkeitsbereich (global)
+fkt fak(n) {
+    fa n <= 1 {
+        gib 1                   // explizite Rückgabe
+    }
+    gib n * fak(n - 1)          // Rekursion
+}
+fak(fkt test() { 1 + 1 }())     // inline benannte Funktion
+// statische Funktion (praktischer Nutzen gering)
+stati fkt statisch() { }
+// Anweisungs‑Funktion, vor allem für Bibliotheken
+satz fkt satzfkt(a, b) { }
+satzfkt 1, 2                    // Aufruf als eigenständige Anweisung
+// memoisierte Funktion (#‑Präfix)
+#fkt fib(n) {
+    als n {
+        0 => { gib 0 }
+        1 => { gib 1 }
+        _ => { gib fib(n-1) + fib(n-2) }
+    }
+}
+// zeig fib(10)                 // → 55
+// asynchrone Funktion (ac‑Präfix)
+ac fkt langeBerechnung(x: zahl) {
+    gib x * 2
+}
+future = langeBerechnung(21)    // liefert Future‑Objekt
+// result = warte future        // auf asynchrones Ergebnis warten
+ac fkt fetchData(url) {
+    gib { "data": "Ergebnis", "status": 50 }
+}
+futureData = fetchData("api")
+// data = warte futureData
+// zeig data?.data ?? "Fehler"
+// Echo‑Funktion; zur Thread‑Sicherheit sind asynchrone Funktionen vorzuziehen
+kernregel sqrt2(__zweck) {
+    x = 1.0
+    iterations = 0
+    max_iter = 20
+    fa __zweck == "compare" {
+        max_iter = 5
+    }
+    indes iterations < max_iter {
+        x = (x + 2 / x) / 2
+        iterations = iterations + 1
+    }
+    gib x
+}
+/|
+handle = sqrt2("compare")        // erster Aufruf mit Modus compare, max_iter=5
+zeig handle.wert()
+sleep(100)                       // zweiter Aufruf nutzt wieder Standard‑Modus store, max_iter=20
+zeig handle.wert()
+|/
+// global‑Funktion‑Deklaration: wird im globalen Bereich angelegt auch bei Verschachtelung; gilt ebenso für ac‑Funktionen mit **ac fkt
+**fkt globalfkt() {
+    g = 2                        // implizit angelegte Variable
+}
+// isolierter Block‑Gültigkeitsbereich
+{ }
+// anonyme Funktion
+verdopple = fkt(x) { x * 2 }
+// zeig verdopple(7)
+// Closure‑Funktion
+fkt macheZaehler() {
+    z = 0
+    fkt ink_() {
+        z = z + 1
+        gib z
+    }
+    gib ink_
+}
+z1 = macheZaehler()
+// zeig z1()                     // → 1
+// zeig z1()                     // → 2
+// Aufruf‑Expandieren von Array‑Parametern
+f = fkt(a, b, c) { /| zeig(a + b + c) |/ }
+args = [1, 2, 3]
+f(...args)                       // Ausgabe 6
+// AST‑Makro
+makro Makro() {
+    // Makro‑Rumpf, Parameter können genutzt werden
+    // beliebige Kernregel‑Anweisungen und Ausdrücke erlaubt
+}
+// ============================================================================
+// Typ‑Aliase und Typ‑Annotationen
+// ============================================================================
+/|
+zahl    // Ganzzahl oder Gleitkommazahl
+lang    // Ganzzahl mit beliebiger Größe (in Kr automatisch unterstützt; nur zur Kompatibilität mit Kern)
+gzl     // Ganzzahl
+kzl     // Gleitkommazahl
+zkt     // Zeichenkette
+einz    // Einzelzeichen
+bool    // Wahrheitswert
+leer    // beliebiger Typ
+|/
+art Person = { name: zkt, alter: zahl, adresse: { strasse: zkt, nr: zahl } }  // Schlüssel müssen Bezeichner sein, nur Typ‑Ausdrücke werden verarbeitet
+art IntListe = zahl
+art Punkt = { x: zahl, y: zahl }
+art Farbe = "rot" | "grün" | "blau" // Literal‑Typ‑Alias für Zeichenketten, kann auch Variable sein
+pers: Person = { "name": "Anna", "alter": 25, "adresse": { "strasse": "Hauptstr.", "nr": 10 } }
+// Struktur‑Typen
+art Value {
+    x: gzl
+    y: gzl
+    => {                            // Union‑Variante
+        IntVal(gzl)                 // Typ‑Parameter
+        FloatVal(kzl)
+        NumVal(zahl)
+        Point { x: gzl, y: gzl }
+    }
+}
+struktur: Value = Point(1, 2)       // alternativ Value struktur = Point(1, 2)
+// Einrückungs‑Syntax für Struktur‑Definition
+art Value
+    x: gzl
+    y: gzl
+    =>
+        IntVal(gzl)
+        FloatVal(kzl)
+        NumVal(zahl)
+        Point { x: gzl, y: gzl }
+// Zeiger‑Operationen
+/|
+| Zeigertypen: zgr<T> (roher Zeiger) oder schlau<T> (intelligenter Zeiger mit automatischer Speicherverwaltung)
+| eingebaute Funktionen (auch als Methoden aufrufbar):
+|   zgr(Wert)           rohen Zeiger erzeugen; Wert wird auf den Heap kopiert
+|   schlau(Wert)        intelligenten Zeiger erzeugen; Wert auf Heap kopiert, Lebenszyklus automatisch verwaltet
+|   zgrw(Zeiger)        Dereferenzieren, Wert lesen
+|   zgrs(Zeiger, Wert) Dereferenzieren, Wert schreiben
+|   frei(Zeiger)        rohen Zeiger freigeben; intelligente Zeiger brauchen keine manuelle Freigabe
+|   zgrNull(Zeiger)     prüfen, ob Zeiger null ist
+|   Zeiger.typ()        liefert "zgr" oder "schlau"
+|/
+x = 42
+p = zgr(x)                  // roher Zeiger auf Kopie von x
+sp = schlau(x)              // intelligenter Zeiger auf Kopie von x
+// zeig zgrw(p)             // 42
+zgrs(p, 100)
+// zeig zgrw(p)             // 100
+// zeig x                   // 42 (Original bleibt unverändert)
+frei(p)                     // rohen Zeiger freigeben
+// Zeiger und Strukturen
+art TestArt {               // Struktur‑Typ definieren
+    x: gzl
+    y: gzl
+}
+pt: TestArt = { "x": 3, "y": 4 }  // Struktur‑Wert: Objekt‑Literal mit Typ‑Annotation
+ptr = zgr(pt)               // roher Zeiger auf Kopie von pt
+// zeig zgrw(ptr).x         // 3
+zgrs(ptr, { "x": 5, "y": 6 }) // neuen Struktur‑Wert per Dereferenz schreiben
+// zeig zgrw(ptr).x         // 5
+// zeig pt.x                // 3 (Original‑Objekt unverändert)
+frei(ptr)
+// Typ‑Annotation für Funktions‑Parameter
+fkt begruesse(name: zkt, alter: zahl): [zkt]? {   // [zkt]? ist hier fehlerhaft: bedeutet Array von Zeichenketten, Funktion liefert aber einzelne Zeichenkette
+    "Hallo {name}, du bist {alter} Jahre alt."
+}
+// Rückgabetyp direkt vor Funktionskopf notieren
+IntListe gibzahl() { gib 0 }
+// zahl für allgemeine Zahl; gzl Ganzzahl; kzl Gleitkommazahl; zkt Zeichenkette; einz Einzelzeichen; bool Wahrheitswert; leer bedeutet kein spezifizierter Rückgabetyp
+bool boolWert() { gib wahr }
+leer beliebig() { }
+// Klassen‑Methoden (dürfen nicht innerhalb von Funktionen definiert werden)
+// öffent öffentlich; privat privat; schutz geschützt
+klass Tier {
+    // Instanz‑Eigenschaften (öffentlich)
+    öffent name: zkt = "unbekannt"
+    privat alter: gzl = 0
+    // ganzen Block als geschützt markieren
+    schutz {
+        schutzVar = null
+    }
+    // statische Eigenschaften auf Klassen‑Ebene
+    stati zaehler: gzl = 0
+    stati das x = 1
+    // Konstruktor (standardmäßig öffentlich)
+    konstr(name, alter) {
+        dies.name = name        // auf nicht‑statische Mitglieder muss mit dies. zugegriffen werden
+        dies.alter = alter
+        zaehler++               // statische Eigenschaften können innerhalb der Klasse direkt angesprochen werden
+    }
+    // Instanz‑Methode öffentlich
+    fkt sprich() {
+        // zeig dies.name + " macht ein Geräusch."
+    }
+    // innerhalb der Klasse kann das fkt‑Schlüsselwort für Methoden weggelassen werden
+    zeigAlter() {
+        // zeig dies.name + " ist " + dies.alter.alt() + " Jahre alt."
+    }
+    // statische Methode, Aufruf über Klassenname.Methode
+    stati fkt getZaehler(): gzl {
+        gib zaehler
+    }
+}
+öffent klass öffentlich { }     // Zugriffsmodifikator als Präfix erlaubt
+stati klass statiklass { }      // statische Klasse
+// Einrückungs‑Syntax für Klassen mit Vererbung
+klass Hund(Tier)                // von Elternklasse Tier erben
+    privat rasse: zkt = "Mischling"
+    schutz
+        var = ""                // kompletter Block als geschützt markieren per Einrückung
+    konstr(name, alter, rasse)
+        ober(name, alter)       // Konstruktor der Elternklasse aufrufen; muss erste Anweisung sein
+        dies.rasse = rasse
+    sprich()            // Methode der Elternklasse überschreiben
+        // zeig dies.name + " bellt!"
+    zeigRasse()
+        // zeig "Rasse: " + dies.rasse
+    // private Methode, nur innerhalb der Klasse aufrufbar
+    privat intern()
+        // zeig "interne Methode"
+// Instanz erzeugen und Methoden aufrufen
+tier = Tier("Allgemein", 5)     // Objekt‑Instanz anlegen
+tier.sprich()                   // "Allgemein macht ein Geräusch."
+bello = Hund("Bello", 3, "Schäferhund")
+bello.sprich()                  // "Bello bellt!"
+bello.zeigRasse()               // "Rasse: Schäferhund"
+// Zugriff auf statische Eigenschaften und Methoden
+Tier.getZaehler()               // Anzahl erzeugter Instanzen abfragen
+Tier.zaehler = 0                // statische Eigenschaft direkt verändern
+// Typ‑Annotationen für Eigenschaften, Parameter und Rückgabewerte werden zur Laufzeit geprüft
+klass Punkt {
+    x: gzl, y: gzl              // Eigenschafts‑Deklaration, der/das kann weggelassen werden, standardmäßig veränderlich
+    konstr(x: gzl, y: gzl) {
+        dies.x = x; dies.y = y
+    }
+    fkt abstand(): kzl {
+        gib sqrt(dies.x^2 + dies.y^2)
+    }
+}
+p = Punkt(3, 4)
+// zeig p.abstand()             // 5
+tier.sprich()                   // "Allgemein macht ein Geräusch."
+bello.sprich()                  // "Bello bellt!"
+bello.zeigRasse()               // "Rasse: Schäferhund"
+// empfohlene Schreibweise
+klass Testklass {               // äußere Ebene mit geschweiften Klammern für klare Abgrenzung
+privat                          // innere Ebene per Einrückung ohne Klammern, übersichtlicher
+    stati x = 1
+öffent
+    stati fn(a)                 // Klammern oder Einrückung möglich, konsistent bleiben
+        a + x                   // Ergebnis‑Ausdruck wird zurückgegeben; statisches x direkt nutzbar
+    stati leer fn(a)            // leer‑Modifikator um unbeabsichtigte Rückgaben zu verhindern
+        als a
+            1 => gib 1          // bei eingerücktem als‑Block dürfen keine geschweiften Klammern in den Zweigen stehen
+}
+// ============================================================================
+// Zeichenketten‑Methoden
+// ============================================================================
+s2 = "  Hallo Welt!  "
+s2.län()                        // Byte‑Länge (selten verwendet)
+s2.län                          // Anzahl der UTF‑8‑Zeichen
+s2.ala()                        // Zu Array umwandeln
+s2.trim()                       // Leerzeichen am Anfang und Ende entfernen
+s2.hat("Welt")                  // prüfen, ob Teilzeichenkette enthalten ist
+s2.beg(" Hallo")                // prüfen, ob Zeichenkette mit Präfix beginnt
+s2.wo("Welt")                   // erste Position einer Teilzeichenkette
+s2.letzt("l")                   // letzte Position einer Teilzeichenkette
+s2.ab(2, 6)                     // Teil‑Zeichenkette [2,6)
+s2[2:6]                         // Synonym zur ab‑Methode; [1:] ist ebenfalls gültig
+s2 = "1.5"
+s2.groß()                       // in Großbuchstaben umwandeln, berücksichtigt ÄÜÖ
+s2.klein()                      // in Kleinbuchstaben umwandeln, ÄÜÖ → äüö
+s2.umk()                        // Zeichenkette umkehren (UTF‑8‑Zeichen‑genau)
+s2.zähle("aa")                  // nicht‑überlappende Vorkommen einer Teilzeichenkette zählen
+s2.ohneAnfang("Hallo")          // Präfix entfernen falls vorhanden, sonst Original‑String zurückgeben
+s2.ohneEnde("Welt")             // Suffix entfernen falls vorhanden, sonst Original‑String zurückgeben
+s2.füll(5, "r", "-")            // auf gegebene Breite auffüllen; Richtung l/r/c links/rechts/zentriert, Füllzeichen standardmäßig Leerzeichen
+s2.endetMit("!")                // prüfen ob mit Suffix endet, Ergebnis 0 oder 1
+s2.wieder(3)                    // Zeichenkette n‑mal wiederholen
+s2.zeich(2)                     // Zeichen an Indexposition zurückgeben (UTF‑8‑Zeichen)
+s2.istZiffer()                  // prüfen ob alle Zeichen Ziffern sind (0‑9); leere Zeichenkette liefert 0
+s2.istBuchstabe()               // prüfen ob alle Zeichen Buchstaben sind
+s2.istAlnum()                   // prüfen ob alle Zeichen Buchstaben oder Ziffern sind
+s2.istRaum()                    // prüfen ob nur Whitespace‑Zeichen enthalten sind (Leerzeichen, Tabulator, Zeilenumbruch etc.)
+s2.istGroß()                    // wahr, falls Buchstaben vorhanden und alle Buchstaben groß geschrieben sind; Zahlen/Symbole werden ignoriert
+s2.istKlein()                   // wahr, falls Buchstaben vorhanden und alle Buchstaben klein geschrieben sind
+s2.istZahl()                    // prüfen ob gesamte Zeichenkette eine Zahl darstellt, erlaubt vorangestelltes +/-; leere Zeichenkette → 0
+s2.entferne("l")                // alle Vorkommen der Teilzeichenkette löschen, neue Zeichenkette zurückgeben
+s2.anfang(3)                    // erste 3 Zeichen extrahieren (UTF‑8)
+s2.rechts(3)                    // letzte 3 Zeichen extrahieren (UTF‑8)
+"1" ## "1"                      // Zeichenketten‑Verkettung → "11"
+// reguläre Ausdrücke pass‑Methode für Trefferprüfung
+line = "Name: Max"
+match = line.pass(/^([^:]+):(.*)&/)    // & ersetzt $ im regulären Ausdruck; Unicode‑Zeichen unterstützt
+fa match != null {
+    // zeig match[1]   -> "Name"
+    // zeig match[2]   -> " Max"
+}
+// regulärer Ausdruck ersetzen mit ers
+text2 = "speed 100 rpm"
+text2.ers(/\s*\d+\s*rpm/, "km/h")
+// regulärer Ausdruck teilen zum Zerlegen von Strings
+csv = "a,b;c,，d"
+csv.teil(/[,，、;]/)                   // → ["a","b","c","d"]
+// alle passenden Teilstrings extrahieren mit entfal
+// zeig "abc123def456".entfal(/\d+/)   // -> ["123", "456"]
+// reguläre Ausdrücke generieren; optional Regex, Ausschluss‑Menge, Start‑ und End‑Code‑Point
+regGen(/[\\x20-\\x7E]/, /\s/, 32, 126) // alle druckbaren ASCII‑Zeichen generieren (32‑126), Leerzeichen ausschließen; vermeide zu große Bereiche
+regGen("[0-9]", "57")                  // → ["0","1","2","3","4","6","8","9"]
+// Zeichenketten‑Interpolation
+// ────────────────────────────────────────────────────────────────
+// Syntax: {Ausdruck}                      nur Ausdruck auswerten und einfügen
+//       {Ausdruck:altFormat}              alt‑Methode mit altFormat‑Parameter aufrufen
+//       {Ausdruck:ausrichtungBreite}      füll‑Methode mit Breite und Ausrichtung aufrufen
+//       {Ausdruck:FüllzeichenausrichtungBreite}       füll‑Methode mit Füllzeichen, Ausrichtung, Breite
+//       {Ausdruck:altFormatFüllzeichenausrichtungBreite}    zuerst alt, dann füll‑Methode
+//
+// Ausrichtungszeichen:
+//   <    linksbündig (Text links, rechts auffüllen)  entspricht füll(N, "r")
+//   >    rechtsbündig (Text rechts, links auffüllen) entspricht füll(N, "l")
+//   ^    zentriert (beidseits auffüllen)             entspricht füll(N, "c")
+//
+// Füllzeichen: einzelnes Zeichen, direkt vor dem Ausrichtungszeichen; Standard ist Leerzeichen.
+//       Falls an dieser Stelle eine Ziffer steht und davor ebenfalls Ziffer, gehört sie zum alt‑Teil und ist kein Füllzeichen.
+//
+// Doppelpunkt‑Regel: Doppelpunkt muss auf oberster Ebene der Interpolation stehen; darf nicht innerhalb von Strings, Zeichen‑Literalen oder Klammern liegen, sonst wird er nicht interpretiert.
+//           Ausrichtungszeichen und Breite sind erforderlich; Breite muss nicht‑negative Ganzzahl sein; sonst wird der gesamte Teil als alt‑Format‑String behandelt.
+//
+// Backtick‑Interpolation nutzt &{...}, normale geschweifte Klammern bleiben unverändert.
+// ────────────────────────────────────────────────────────────────
+name2 = "Welt"
+n = 42
+s2 = "  Hallo Welt!  "
+// —— Basis‑Interpolation ——
+// zeig "Hallo {name2}!"               -> "Hallo Welt!"
+// zeig "2 + 2 = {2 + 2}"              -> "2 + 2 = 4"
+// zeig s2[2]                          // einzelnes Zeichen per Index extrahieren
+// —— alt‑Formatierung für Zahlen ——
+// zeig "{n:.2k}"                      -> "42.00"; ruft alt(".2k") auf
+// zeig "{n:16}"                       -> "2A"; Umwandlung in Hexadezimalsystem
+// zeig "{n:04X}"                      -> "002A"; führende Nullen, Großbuchstaben‑Hex
+// —— Ausrichtung mit füll‑Methode ——
+// zeig "|{n:<8}|"                     -> "|42      |" linksbündig
+// zeig "|{n:>8}|"                     -> "|      42|" rechtsbündig
+// zeig "|{n:^8}|"                     -> "|   42   |" zentriert
+// zeig "|{n:*<8}|"                    -> "|42******|" Füllzeichen *
+// zeig "|{n:-^8}|"                    -> "|---42---|" Füllzeichen Minus‑Zeichen
+// zeig "|{n:0>4}|"                    -> "|0042|" auffüllen mit Null
+// —— Kombination alt‑Format und Ausrichtung (zuerst alt, dann füll) ——
+// zeig "|{n:16>8}|"                   -> "|      2A|" Hex, dann rechtsbündig
+// zeig "|{n:16<8}|"                   -> "|2A      |" Hex, linksbündig
+// zeig "|{n:16^8}|"                   -> "|   2A   |" Hex, zentriert
+// zeig "|{n:16*<8}|"                  -> "|2A******|" alt‑Parameter 16, Füllzeichen *, linksbündig
+// zeig "|{n:.2k>10}|"                 -> "|     42.00|" zwei Nachkommastellen, rechtsbündig
+// —— Randfälle bei Format‑Angaben ——
+// zeig "{n:.2k^}"                     -> "42.00"; ^ ohne Zahl gehört zum alt‑Teil
+// zeig "{n:04X}"                      -> "002A"; kein Ausrichtungszeichen → rein alt‑Format
+// zeig "{n:2>4}"                      -> "**42"; 2 wird als Füllzeichen interpretiert
+// zeig "{n:16>8}"                     -> "      2A"; 16 gehört zum alt‑Teil
+// —— expliziter Methodenaufruf bei Mehrdeutigkeit ——
+// zeig "|{n.füll(8, \"l\", \"2\")}|"      -> "|22222242|" Mehrdeutigkeit umgehen
+// —— Farb‑Ausgabe mit ANSI‑Farb‑Codes ——
+// zeig "{#FFFFFF} Text in Farbe. {#end}"      // #end oder #zurück setzt Farbe zurück
+// f = "#FFFFFF"
+// zeig "{f} Farbe. {#end}"            // Variable für Farbcode erlaubt; # kann escaped werden
+// —— Backtick‑Interpolation nutzt &{…} ——
+// zeig `&{name2}`                     // -> "Welt"
+// zeig `|&{n:<8}|`                    // -> "|42      |"
+// zeig `|&{n:16>8}|`                  // -> "|      2A|"
+// zeig `Tabelle: &{"Name":-^6} &{"Wert":*<6}`  // mehrere Spalten mit Formatierung
+// ============================================================================
+// Objekt‑Operationen
+// ============================================================================
+person = { "name": "Max", "alter": 30, "beruf": "Ingenieur" }   // Zahlen als Schlüssel werden zu Strings umgewandelt, Zahlen sind keine gültigen Bezeichner‑Schlüssel
+person.alter = 31                      // Objekt‑Eigenschaft zuweisen; der‑Anweisung unterstützt keinen Eigenschaftszugriff
+person.stadt = "Berlin"                // neue Eigenschaft hinzufügen
+// zeig person.name
+person.adresse = { "strasse": "Hauptstr.", "nr": 10 }
+// zeig person.adresse.strasse
+std = { "A": 2, "__stdwert": 1 }       // Standard‑Wert für nicht vorhandene Eigenschaften; wird nur bei Variablen‑Zugriff ausgewertet
+// Objekt‑Spread‑Syntax zum Kopieren und Überschreiben
+person = { "name": "Alice", "age": 30 }
+newPerson = { ...person, "age": 31 }    // { name: "Alice", age: 31 }
+// Objekt‑Comprehension
+original = { "a": 10, "b": -5, "c": 7 }
+positive = { k: w für k, w in original fa w > 0 }   // nur Einträge mit positivem Wert behalten → {a:10, c:7}
+person["d"] = 1                         // neuen Schlüssel‑Wert‑Eintrag per Index‑Syntax hinzufügen
+{ d, ...person } = person               // Schlüssel d aus Objekt entfernen mittels Destrukturierung
+person.alt()                            // Objekt in Zeichenkette umwandeln
+person.ala()                    // Zu Array umwandeln
+person.anf("c", 3)                      // Schlüssel‑Wert‑Paar hinzufügen
+person.lösch("c")                       // Schlüssel‑Wert‑Paar löschen
+person.län()                            // Byte‑Größe
+person.län                              // Anzahl der Objekt‑Eigenschaften
+person.schl()                           // Array aller Schlüssel
+person.werts()                          // Array aller Werte
+person.eintr()                          // Array aller Schlüssel‑Wert‑Paare als Objekte
+person.zufall()                         // zufälliges Schlüssel‑Wert‑Paar zurückgeben; optional Einschränkung der Schlüssel‑Menge
+person.zufWert()                        // zufälligen Wert zurückgeben; optionale Schlüssel‑Filterung
+person.umk()                            // Reihenfolge der Einträge im Objekt umkehren (vor Ort verändert)
+person.vereinige({ "ort": "Bonn" })     // flache Vereinigung zweier Objekte, neues Objekt zurückgeben, spätere überschreiben frühere
+person.kopiere()                        // flache Kopie des Objekts liefern; Änderungen an der Kopie beeinflussen Original nicht
+// ============================================================================
+// Array‑Methoden
+// ============================================================================
+arr = [5, 2, 9, 1]
+arr.alt()                               // Array in Zeichenkette umwandeln
+arr.anf(4)                              // Element am Ende anhängen (verändert Original‑Array)
+arr.finde(9)                            // Element suchen, erstes passendes Element liefern, null falls nicht gefunden
+arr.idx(2)                              // Index eines Elements ermitteln
+arr.lösch(2)                            // Element am angegebenen Index löschen; Rückgabewert ist gelöschtes Element, nicht das modifizierte Array
+arr.beit("\n")                          // Array‑Elemente zu einer Zeichenkette verbinden mit Trennzeichen
+arr.sort()                              // Array vor Ort sortieren (Zahlen‑ oder lexikografische Sortierung); Vergleichsfunktion kann übergeben werden
+arr.unique()                            // Duplikate entfernen, neues Array behält Reihenfolge des ersten Auftretens
+arr.teil(1, 3)                          // Teil‑Array extrahieren, halboffenes Intervall, negative Indizes erlaubt
+arr[1:2]                                // Synonym zur teil‑Methode
+arr.hat(9)                              // prüfen ob Element enthalten ist, Vergleich über String‑Umwandlung, Ergebnis 0 oder 1
+arr.alle(2)                             // alle Indizes von passenden Elementen als Array liefern
+arr.max()                               // Maximum ermitteln (zuerst numerisch, sonst lexikografisch)
+arr.min()                               // Minimum ermitteln, gleiche Regeln wie max
+arr.sum()                               // Summe über numerisches Array berechnen; Fehler bei nicht‑numerischen Inhalten
+arr.zufall()                            // zufälliges Element als Objekt {Index, Wert} liefern, optionale Index‑Einschränkung
+arr.zufWert()                           // zufälligen Wert liefern
+arr.umk()                               // Array‑Element‑Reihenfolge vor Ort umkehren
+arr.letzt(9)                            // letzter Index des gesuchten Werts, -1 falls nicht vorhanden; ohne Parameter liefert letztes Element
+arr.flach()                             // Array um eine Ebene auflösen
+arr.flach(2)                            // Array bis angegebene Tiefe auflösen
+arr.nehmen(2)                           // die ersten n Elemente als neues Array zurückgeben
+arr.fallen(2)                           // ersten n Elemente verwerfen, Rest als neues Array liefern
+arr.erstes()                            // erstes Element liefern; Fehler bei leerem Array
+arr.mittel()                            // arithmetischer Mittelwert für Zahlen‑Array, Ergebnis Gleitkommazahl
+arr.produkt()                           // Produkt aller Zahlen‑Elemente berechnen
+arr.einfuegen(1, 99)                    // Element an bestimmtem Index einfügen (verändert Original‑Array)
+arr.vereinige([6, 7])                   // zwei Arrays zusammenfügen, neues Array liefern, Original bleibt unverändert
+arr.schnitt([1, 3, 5])                  // Schnittmenge: Elemente die in beiden Arrays vorkommen
+arr.differenz([1, 3, 5])                // Differenzmenge: nur Elemente des ursprünglichen Arrays, die nicht im zweiten vorkommen
+arr.entferne(5)                         // alle Vorkommen eines Werts löschen, verändert Original‑Array
+arr.mische()                            // Array‑Elemente vor Ort zufällig mischen
+arr[0] = 10;                            // Zuweisung per Index
+arr[1] += 3;                            // kombinierte Zuweisung per Index
+--arr[2];                               // Präfix‑Inkrement‑/Dekrement‑Operatoren; Semikolon empfohlen um Mehrdeutigkeit zu vermeiden
+// Array‑Spread‑Syntax
+arr = [1, 2, 3]
+arr2 = [...arr, 4, 5]                   // Ergebnis [1,2,3,4,5]
+// Höher‑wertige Array‑Funktionen, erwarten Funktions‑Werte als Argument
+arr.map(fkt(x) { x * 2 })               // Abbildung / Map‑Operation
+arr.filter(fkt(x) { x % 2 == 0 })       // Filter‑Operation
+arr.reduz(fkt(acc, x) { acc + x }, 0)   // Reduktion / Fold‑Operation
+arr.jeden(fkt(x) { /| daten |/ })       // Iteration, Funktion für jedes Element aufrufen, Rückgabewert null
+arr.manche(fkt(x) { x > 3 })            // Existenz‑Quantor: wahr falls mindestens ein Element Bedingung erfüllt, Ergebnis 1 oder 0
+arr.keiner(fkt(x) { x > 10 })           // All‑Quantor‑Negation: wahr wenn kein Element Bedingung erfüllt
+arr.zähl()                              // Element‑Anzahl, synonym zu arr.län
+arr.zähl(fkt(x) { x % 2 == 0 })         // zählen wie viele Elemente das Prädikat erfüllen
+arr.grupp(fkt(x) { x % 2 })             // Elemente nach Funktions‑Ergebnis gruppieren, Objekt {Schlüssel: Element‑Array} zurückgeben
+arr.partit(fkt(x) { x > 3 })            // Array aufteilen in [erfüllt, nicht erfüllt]
+arr.erste(fkt(x) { x > 3 })             // erstes Element das Prädikat erfüllt, null falls keines
+arr.zip([10, 20, 30, 40])               // zwei Arrays element‑weise zu Paaren [[a,b], …] verbinden
+// Array‑Comprehension
+quadrate = [ i*i für i in 0..5 fa i % 2 == 0 ]   // Ergebnis [0,4,16]
+objWerte = [ w für w in { "a": 1, "b": 2 } ]     // über Objekt‑Werte iterieren → [1,2]
+// Bereich‑Ausdruck, nutzbar für Schleifen und Comprehensions
+r = 1..5                                // erzeugt Array [1,2,3,4,5]
+r = 10..1 sch -2                        // benutzerdefinierter negativer Schritt
+r = 1..-5                               // Schritt‑Weite wird automatisch ermittelt für absteigende Bereiche
+// ============================================================================
+// Zahlen‑Methoden
+// ============================================================================
+num = 123
+num.alt()                               // Zahlen‑Wert als Zeichenkette "123"
+num.alt(16)                             // Hexadezimale Darstellung "7B"; optional "x"/"X" für Klein‑ / Großbuchstaben‑Hex
+// weitere Format‑Parameter: ",.2k" fügt Tausender‑Trennzeichen hinzu; "_.2k" nutzt Unterstrich als Trennzeichen; Auf‑ / Abrund‑Modifikatoren ^ und _ möglich
+// Standard: kaufmännische Rundung; ".2k^" aufwärts runden, ".2k_" abwärts runden; einzelne Modifikatoren "k^", "k_", "auf", "ab" sind erlaubt
+// Parameter‑Format: `[0][Breite][Trennzeichen][.Genauigkeit][Typ][^|_]`
+num.alt(10, ".2k")
+num.alt("04X")                          // "007B"
+str = "456.00"
+str.alz("k")                            // Zeichenkette in Zahl umwandeln; z → Ganzzahl, k → Gleitkommazahl; auch ^/_ für Auf‑/Abrundung
+str.alz(16)                             // Zeichenkette als Hex‑Zahl interpretieren und umwandeln
+str.alz()                               // Zeichenkette zur Zahl umwandeln ohne zusätzliche Format‑Regeln
+3.14159.runden(2)                       // auf zwei Nachkommastellen runden; meist durch alt‑Methode ersetzbar
+// ============================================================================
+// weitere generische Methoden
+// ============================================================================
+NULL = null                             // Null‑Wert‑Konstante
+Leer = []                               // leeres Objekt / Array / Zeichenkette etc.
+NULL.leer()                             // wahr; prüft auf leeren / null‑Wert
+Leer.leer()                             // wahr
+NULL.keine()                            // wahr; explizite null‑Prüfung
+Leer.keine()                            // fals
+arr = [1, 2, 3]
+arr.leeren()                            // Array‑Inhalt löschen → leeres Array []
+// ============================================================================
+// Infinitesimalrechnung und numerische Analyse
+// ============================================================================
+fkt quadrat(x) { gib x ^ 2 }            // f(x) = x²
+fkt summe(x, y) { gib x + y }           // mehr‑variable Funktion f(x,y)=x+y
+fkt sinx(x) { gib sin(x) }
+fkt f_ode(x, y) { gib -y }              // Funktion für gewöhnliche Differentialgleichung y' = -y
+// ---------- Ableitungen ----------
+abl(quadrat, 2)                         // erste numerische Ableitung; Schrittweite standardmäßig 1e‑5; Ergebnis ca. 4.0
+abl(quadrat, 2, 0.0001)                 // benutzerdefinierte Schrittweite 1e‑4
+ab2(quadrat, 3)                         // zweite Ableitung über zentrale Differenz, ca. 2.0
+ab3(quadrat, 2)                         // dritte Ableitung (Genauigkeit vierter Ordnung), ca. 0.0
+ab4(quadrat, 2)                         // vierte Ableitung nach Fünf‑Punkt‑Formel; Standard‑Schrittweite 1e‑2 wegen Genauigkeit
+pabl(summe, [1, 2], 0)                  // partielle Ableitung nach 0‑tem Parameter (x), Ergebnis 1.0
+pabl(summe, [1, 2], 1)                  // partielle Ableitung nach 1‑tem Parameter (y), Ergebnis 1.0
+// ---------- Integration ----------
+inte(quadrat, 0, 1)                     // Trapez‑Integral, standardmäßig 100 Teilintervalle; Ergebnis ca. 0.333333
+inte(quadrat, 0, 1, 1000)               // Anzahl der Teilintervalle vorgeben
+simp(quadrat, 0, 1, 10)                 // Simpson‑Integral, benötigt gerade Anzahl Teilintervalle, passt sich automatisch an
+gauss(quadrat, 0, 1, 8)                 // Gauss‑Legendre‑Integration; Knoten‑Zahl 2,4,8 möglich; hohe Genauigkeit
+// ---------- Nullstellen‑Suche ----------
+nullst(sinx, 3, 4)                      // Bisektions‑Verfahren im Intervall [3,4]; liefert ca. π ≈3.14159
+nullst(sinx, 3, 4, 1e‑8)                // benutzerdefinierte Toleranz
+newton(sinx, 3)                         // Newton‑Raphson‑Verfahren, Startwert 3, Ergebnis π
+newton(sinx, 3, 1e‑8, 50)               // Toleranz und maximale Iterations‑Zahl vorgeben
+// ---------- Gewöhnliche Differentialgleichungen ODE ----------
+euler(f_ode, 0, 1, 0.1, 10)             // Euler‑Verfahren; Anfangswert y(0)=1; Schrittweite 0.1; 10 Schritte; Ergebnis‑Array
+rk(f_ode, 0, 1, 0.1, 10)                // klassisches Runge‑Kutta‑Verfahren RK‑4 mit höherer Genauigkeit
+// ---------- Mehr‑variable Funktions‑Analyse ----------
+grad(summe, 1, 2)                       // Gradienten‑Vektor per numerischer partieller Ableitung → [1,1]
+grad(summe, 1, 2, 1e‑5)                 // benutzerdefinierte Schrittweite für Gradienten‑Berechnung
+gradab(summe, [1, 2], 0.1, 100)         // Gradienten‑Abstieg‑Optimierung; liefert Punkt‑Array nach 100 Iterationen
+// ---------- Least‑Squares‑Ausgleichs‑Polynom‑Fit ----------
+// Datenpunkte als Objekt‑Array mit x‑ und y‑Feld
+datenpunkte = [
+    { "x": 0, "y": 1 },
+    { "x": 1, "y": 2.1 },
+    { "x": 2, "y": 3.8 },
+    { "x": 3, "y": 4.9 }
+]
+kquad(datenpunkte, 1)                   // Ausgleichs‑Gerade (Polynom 1‑ten Grades), Koeffizienten‑Array [c0, c1] (Konstante, linearer Term)
+kquad(datenpunkte, 2)                   // quadratischer Ausgleich, [c0, c1, c2]
+// berechnete Koeffizienten können direkt zur Auswertung y ≈ c0 + c1*x + c2*x² genutzt werden
+// beliebige Funktionen (auch anonym) lassen sich als Parameter übergeben
+erg = abl(fkt(x) { x * x }, 3)          // Ableitung von f(x)=x² an Stelle x=3 → Ergebnis 6.0
+// ============================================================================
+// Mathematische eingebaute Funktionen
+// ============================================================================
+wurz(25)                        // Quadratwurzel
+sqrt(25)                        // alternatives Synonym
+kub(10)                         // Kubikwurzel
+cbrt(10)                        // alternatives Synonym
+btr(-10)                        // Betrag‑Funktion
+abs(-10)                        // alternatives Synonym
+sin(0)                          // Sinus‑Funktion (Bogenmaß / Radiant)
+cos(0)                          // Kosinus‑Funktion (Bogenmaß)
+tg(1.0)                         // Tangens‑Funktion (Bogenmaß)
+tan(1.0)                        // alternatives Synonym
+lg(100)                         // Logarithmus zur Basis 10
+log(100)                        // alternatives Synonym
+ln(2.718)                       // natürlicher Logarithmus zur Basis e
+ld(8)                           // Logarithmus zur Basis 2
+ctg(1.0)                        // Kotangens‑Funktion (Bogenmaß)
+cot(1.0)                        // alternatives Synonym
+sec(1.0)                        // Sekans‑Funktion
+csc(1.0)                        // Kosekans‑Funktion
+asin(0.5)                       // Arkus‑Sinus, Ergebnis Bogenmaß
+acos(0.5)                       // Arkus‑Kosinus, Ergebnis Bogenmaß
+atan(1.0)                       // Arkus‑Tangens, Ergebnis Bogenmaß
+atan2(1.0, 1.0)                 // Arkus‑Tangens‑Zwei‑Argument‑Version (y/x), Bogenmaß‑Ergebnis
+sinh(0.0)                       // Hyperbolischer Sinus
+cosh(0.0)                       // Hyperbolischer Kosinus
+tanh(0.0)                       // Hyperbolischer Tangens
+asinh(0.0)                      // Areasinus‑Hyperbolicus
+acosh(2.0)                      // Areakosinus‑Hyperbolicus; Definitionsbereich x ≥ 1
+atanh(0.5)                      // Areatangens‑Hyperbolicus; Definitionsbereich (-1, 1)
+zuf()                           // Zufallszahl im Bereich 0 bis RAND_MAX
+zuf() % 100 + 1                 // Zufallszahl im Bereich 1‑100 erzeugen
+rand()                          // alternatives Synonym
+setze(42)                       // Zufalls‑Seed setzen
+srand(42)                       // alternatives Synonym
+// Zeit‑Funktionen
+zeit()                          // Unix‑Zeitstempel in Sekunden
+zeit_us()                       // Zeit‑Wert in Mikrosekunden
+zeit_ms()                       // Zeit‑Wert in Millisekunden
+zeit_ns()                       // Zeit‑Wert in Nanosekunden
+datum()                         // Datum‑Zeit‑Zeichenkette "YYYY‑MM‑DD HH:MM:SS"
+tick()                          // Zeitmessung beginnen
+tock()                          // seit tick() vergangene Zeit in Mikrosekunden liefern
+tock_ms()                       // vergangene Zeit in Millisekunden
+tock_s()                        // vergangene Zeit in Sekunden
+// Format‑Funktion; alt‑Methode nutzt identische Format‑Spezifikationen, arbeitet aber nur mit einem Wert
+format("Pi = %.2k", 3.14159)    // -> "Pi = 3.14"; Format‑Typen: z Ganzzahl, k Gleitkommazahl, t Zeichenkette, e wissenschaftliche Notation, d Dezimal‑Ganzzahl, % Prozent‑Darstellung
+bytes("")                        // Zeichenkette zu Binär‑Ganzzahl‑Array umwandeln
+umbytes([])                      // Ganzzahl‑Array zu Zeichenkette umwandeln
+BC([])                           // native Binär‑CPU‑Befehle ausführen; erwartet Ganzzahl‑Array; Beispiel [0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3] liefert 42
+/|
+// Konsolen‑Ausgabe‑Funktionen
+schr "Hallo Welt!"              // Text ausgeben ohne Zeilenumbruch
+zeig "Hallo Welt!"              // Text ausgeben mit abschließendem Zeilenumbruch
+zeig `"zkt"`                    // Backtick‑Roh‑String; nur Backtick muss escaped werden
+zeig 42, 1                      // mehrere Werte durch Komma getrennt ausgeben; Plus‑Zeichen erzeugt Rechen‑Ausdruck, keine Verkettung
+zeig "\n Zeilenumbruch; \t Tabulator; \r Wagenrücklauf; \b Backspace; \u Zur vorherigen Zeile; \U Zeilenanfang"
+zeig(fkt test2(x) {}(1))        // beliebige Ausdrücke, auch sofort‑aufgerufene anonyme Funktionen
+zeigIn(stderg, "Ergebnis: ", 42)// Standard‑Ausgabe stdout
+zeigIn(stdfehl, "Fehler: Division durch Null") // Fehler‑Ausgabe stderr; kann von der Shell abgefangen werden
+schrIn()
+loesch()                        // gespeicherte Zeile per Nummer löschen; ohne Parameter alle gespeicherten Zeilen des aktuellen Gültigkeitsbereichs löschen
+zeigAlle()                      // alle gespeicherten Zeilen des aktuellen Bereichs ausgeben; optionale Parameter "klar", "global", "z"/"k"; k bedeutet Neu‑Zeichnen, z zeigt Zeilennummern an
+aktu("Hallo Welt!", 1, "v")     // Zeile an Position ID 1 im Terminal überschreiben; "v" Cursor verstecken, "a" Cursor anzeigen, "t" Cursor temporär verstecken während Ausgabe
+zeig "X" bei 10                 // Ausgabe‑Zeile erhält die ID‑Nummer 10 im aktuellen Gültigkeitsbereich; gleiche ID überschreibt alte Zeile
+// Eingabe‑Funktion lies: liest Zeichenkette oder Zahl in Variable e (wird ggf. neu angelegt); Optionen "z" → Zahl‑Parsen, null bei Misserfolg; "k" → Gleitkommazahl‑Parsen; "v" Eingabe‑Zeile nach Lesen löschen; regulärer Ausdruck filtert Eingabe, liefert null bei Nicht‑Treffer
+debug = ""; input = ""
+lies e mit(/([A‑Z]+)/, "z")                                 // einzeilige Eingabe mit regulärem Ausdruck, führende/nachfolgende Leerzeichen werden entfernt
+lies text mit(
+    bis(                                                    // mehrzeilige Eingabe‑Modus mit bis‑Terminierung
+        _ in "END", "STOP"                                  // End‑Markierungen; werden bei "k"/"z"‑Modus ignoriert
+    ),
+    (
+        input == "int" ? "/[0‑9]+(?:\\.[0‑9]+)?/" :          // dynamischer regulärer Ausdruck als String‑Literal
+        (input == "zkt" ? "/[a‑zA‑Z]+/" : "/[0‑9.]+/")
+    ),                                                      // regulärer Ausdruck als Ausdruck in Klammern
+    "v"                                                     // Option: eingegebene Zeile nach Lesen löschen
+)
+zeig "Eingabe: ", text
+// Zeit‑Verzögerung
+sleep(5)                        // Wartezeit in Millisekunden; Variable ist erlaubt
+|/
+// ============================================================================
+// Ausnahme‑ / Fehler‑Behandlung
+// ============================================================================
+fkt divide(a, b) {
+    ver {                      // try‑Block; fängt von Benutzer per dem geworfene Ausnahmen ab (außer Syntax‑Fehler und interne System‑Fehler)
+        fa b == 0 {
+            dem "Division durch Null"   // Ausnahme werfen
+        } sonst {
+            gib a / b
+        }
+    } den fehler {             // catch‑Block; Variable fehler hält Ausnahme‑Objekt; Klammern um den Variablennamen sind optional
+        // zeig "Fehler: " + fehler
+        gib -1
+    } die {                    // finally‑Block; optional; wird immer vor Verlassen des ver‑Blocks ausgeführt
+        // Aufräum‑Arbeiten
+    }
+}
+ver {
+    // dem 404                 // auch Zahlen‑Werte können als Ausnahme geworfen werden
+} den code {
+    // zeig "Fehlercode: " + code.alt()
+}
+ver {
+    // dem 500
+} den _ { }                    // Wildcard‑Fänger für beliebige Ausnahmen
+// ============================================================================
+// Assert‑Prüfungen und Typ‑Abfragen
+// ============================================================================
+x = 1
+sicher x > 0;
+sicher (x != null);            // Assertion‑Fehler wirft Ausnahme und beendet Programm; Standard‑Fehlermeldung: „Fehler: sicher ist NICH“
+fkt positiv(Zahl) { Zahl > 0 }
+fkt nichtLeer(Text) { Text != null && Text.län > 0 }
+fkt verarbeite(alter, name) {
+    sicher positiv(alter), "Alter muss positiv sein!"       // benutzerdefinierte Assert‑Fehler‑Meldung
+    sicher nichtLeer(name)                                  // Assertion für nicht‑leeren / nicht‑null‑Wert
+}
+// Typ‑Abfrage‑Methoden; bei Enumerationen liefert typ() {typ: aufz, aufz: Varianten‑Name}; bei Klassen‑Instanzen {typ: objekt, klass: Klassen‑Name}
+num = 1
+num.typ()         // -> "gzl"
+art def = fkt(gzl): gzl
+def IntFunc(x: gzl) { gib 1 }
+// typist‑Funktion liefert gleiche Ergebnisse wie die typ()‑Methode
+typist(42)        // -> "gzl"
+typist(3.14)      // -> "kzl"
+typist("hallo")   // -> "zkt"
+typist([1, 2])    // -> "[gzl]"
+typist({"A": 1})  // -> "{A: gzl}"
+typist(IntFunc)   // -> "fkt(gzl): def"
+typist(null)      // -> "null"
+// gtyp‑Methode /‑Funktion liefert grundlegenden Behälter‑Typ
+obj = {}
+arr = []
+obj.gtyp()        // -> "objekt"
+arr.gtyp()        // -> "array"
+IntFunc.gtyp()    // -> "funktion"
+// ============================================================================
+// Enumerationen und Muster‑Matching
+// ============================================================================
+aufz Option {
+    Einige(wert),              // Variante mit Parameter‑Daten
+    Keine,                     // parameter‑lose Variante; Konstruktor bleibt Funktion‑Wert, zum Vergleich nutze .__tag
+    VAL_GZL,
+    VAL_KOMMA,
+    VAL_ARRAY
+}
+// Enumerations‑Variante erzeugen: Aufruf der Variante wie Funktion liefert Objekt { __tag: "Variantenname", __felder: [Parameter‑Array] }
+opt = Einige(42)               // { __tag: "Einige", __felder: [42] }
+none = Keine                   // { __tag: "Keine", __felder: [] }
+// Muster‑Matching‑Ausdruck mit als … { … }
+// Hinweis: Enumerations‑Matching ist ein Ausdruck; bei mehreren Rückgabe‑Pfade explizit gib nutzen oder leer‑Funktions‑Modifikator
+als opt {
+    Einige(w) => {
+        // zeig "Wert: " + w
+    }
+    Keine => {
+        // zeig "Kein Wert"
+    }
+}
+// Enumeration als Rückgabetyp deklarieren
+Option wertfkt() { }
+// Konstanten‑Muster‑Matching
+als 42 {
+    42 => { /| zeig "gleich 42" |/ }
+    _  => { /| zeig "nicht 42" |/ }             // Wildcard‑Platzhalter
+}
+// Objekt‑Destrukturierung im Muster‑Matching
+als { "name": "arisu", "alter": 1 } {
+    { name, alter } => { /| zeig name + " ist " + alter |/ }
+}
+// Mehrfach‑Muster und Vorbedingungen
+x = VAL_GZL
+als x {
+    VAL_GZL | VAL_KOMMA => "zahl"                   // mehrere Varianten in einem Zweig
+    VAL_ARRAY fa typist(x) == "array" => "array"    // Muster mit zusätzlicher Bedingung
+    _ => "other"
+}
+// Einrückungssyntax für als‑Ausdruck
+/|
+als x
+    "A" =>
+        zeig "Match A"
+        gib 1
+    "B" =>
+        zeig "Match B"
+        gib 2
+|/
+// ============================================================================
+// Datei‑Operationen
+// ============================================================================
+/|
+imp "math.kr" as m                              // Import mit Alias‑Bezeichnung; Zugriff über Alias‑Eigenschaften
+imp "utils.kr"                                  // Direkter Import; alle Bezeichner gelangen in den aktuellen Gültigkeitsbereich
+imp typs                                        // Import aus dem lag‑Unterordner von kr.exe; Dateiendung .kr kann weggelassen werden
+lese("input.txt")                               // gesamte Textdatei als Zeichenkette einlesen
+leseBin("img.png")                              // Binärdatei einlesen, Ganzzahl‑Array zurückgeben
+schrd("out.txt", "Hallo")                       // Datei schreiben; String → Textdatei, Ganzzahl‑Array → Binärdatei
+ausf("ffplay -nodisp -autoexit audio/1.ogg")    // externen Konsolen‑Befehl ausführen, Ergebnis‑Objekt zurückgeben
+ac_ausf()                                       // asynchrone Variante von ausf, nicht blockierend
+lauf("C:\test.exe", ["--h"])                    // Programm ausführen, Rückgabewert nahezu identisch mit ausf; Aufruf ohne Argumente, falls kein zweiter Parameter vorhanden
+f = ac_lauf("C:\test.exe", ["--h"])             // Asynchrones lauf
+aufgAnf(f.id)                                   // -> 1
+aufgT(f.id)                                     // Prozess beenden
+|/
+// ============================================================================
+// KDB‑Datenbank‑Funktionen
+// ============================================================================
+/|
+daten = ladeKD("test.kd")
+// Schreiben eines neuen Eintrags
+eintrag1 = {
+    id: 1001,                                   // optionale ID; bei Weglassen wird automatisch eine neue ID zugewiesen
+    vater: 0,                                   // ID des übergeordneten Datensatzes
+    typ: 1,                                     // Typ‑Kennzeichnung: 1 Text; 2 Binärdaten; 3 sonstige Daten
+    worte: ["Mitarbeiter", "Entwicklung"],      // Schlagwort‑Tags
+    text: "Alice Schmidt",                      // optionaler Textinhalt
+    daten: bytes("\x48\x65\x6C\x6C\x6F")        // Binärdaten; bytes‑Funktion erzeugt das Byte‑Array
+}
+schrKD(daten, eintrag1)                         // neuen Eintrag speichern; Fehler bei doppelter ID
+erneuKD(daten, eintrag1)                        // vorhandenen Eintrag aktualisieren; Fehler falls ID nicht vorhanden
+für id in (sucheTyp(meineDaten, 5)) {           // Beispiel: alle Datensätze mit Typ 5 löschen
+    loesKD(meineDaten, id)
+}
+komprimKD(meineDaten)                           // physische Datei komprimieren, freigewordenen Speicherplatz zurückgewinnen
+eintrag = daten.hole(1001)                      // Datensatz per ID abfragen
+// Rückgabe‑Struktur des Eintrag‑Objekts: {id: 1001, vater: 0, typ: 1, tags: [...], __kd_daten: {...}, __kd_id: 1001}
+zeig eintrag.text                               // Textinhalt ausgeben
+zeig eintrag.id, eintrag.vater, eintrag.art     // Metadaten auslesen
+zeig eintrag.daten |> kodierBase64()            // Binärdaten als Base64 ausgeben, um Terminal‑Probleme zu vermeiden
+// Suchen nach Schlagwörtern
+treffer = daten.sucheTag("Mitarbeiter")         // Array mit passenden IDs zurückgeben
+für id in treffer {
+    eintrag = daten.hole(id)
+    zeig eintrag.text
+}
+// Suche nach Datensatz‑Typ
+daten.sucheTyp(2)                               // alle Einträge mit Typ‑Wert 2
+daten.kinder(1001)                              // alle Kind‑Datensätze mit vater‑ID = 1001
+// Volltextsuche mit regulärem Ausdruck im Text‑Feld
+daten.suche("Projekt")
+// Alle vorhandenen IDs ermitteln
+daten.alle()
+daten.zaehle()                                  // Gesamtzahl der gespeicherten Datensätze
+menge = ladeKD("daten.kd")
+verschlKD(menge, "meinPasswort")                // KDB‑Datei mit Passwort verschlüsseln
+entschlKD(menge, "meinPasswort")                // verschlüsselte Datei entschlüsseln
+|/
+// ============================================================================
+// JSON‑Serialisierung und Parsen
+// ============================================================================
+/|
+// JSON‑Text zu Kr‑Objekt parsen
+obj = jsonzu(`{"name": "Kernregel", "version": 1.23, "features": ["JSON", "fast"]}`)
+// Kr‑Daten‑Struktur zu JSON‑Zeichenkette umwandeln
+data = { name: "Test", zahl: 42, aktiv: wahr }
+jsonStr = zujson(data)
+zeig jsonStr                                    // Ausgabe: { "name" : "Test", "zahl" : 42, "aktiv" : 1 }
+|/
+// ============================================================================
+// Netzwerk‑Anfragen (ANFR / ac_ANFR)
+// ============================================================================
+/|
+// synchrone GET‑Anfrage
+erg = ANFR("GET", "https://httpbin.org/get", {
+    kopf: { "User‑Agent": "Kernregel" },
+    zeitgre: 5
+})
+zeig erg.zustand
+zeig erg.kopf["Content‑Type"]
+zeig erg.inhalt
+// HEAD‑Anfrage
+ANFR("HEAD", "https://example.com")
+// synchrone POST‑Anfrage
+antwort = ANFR("POST", "https://httpbin.org/post", {
+    daten: "{\"name\":\"test\"}",
+    kopf: { "Content‑Type": "application/json" }
+})
+zeig antwort.zustand
+// synchrone PUT‑Anfrage
+res = ANFR("PUT", "https://httpbin.org/put", {
+    daten: "aktualisierter Inhalt",
+    kopf: { "If‑Match": "etag123" }
+})
+// synchrone DELETE‑Anfrage
+status = ANFR("DELETE", "https://httpbin.org/delete")
+zeig status.zustand
+// synchrone PATCH‑Anfrage
+patch = ANFR("PATCH", "https://httpbin.org/patch", {
+    daten: "{\"status\":\"halb\"}"
+})
+// asynchrone GET‑Anfrage
+z = ac_ANFR("GET", "https://httpbin.org/get", { zeitgre: 10 })
+res = warte z
+zeig res.inhalt
+// asynchrone POST‑Anfrage
+fut = ac_ANFR("POST", "https://httpbin.org/post", {
+    daten: "hallo welt",
+    kopf: { "Content‑Type": "text/plain" }
+})
+ergebnis = warte fut
+zeig ergebnis.zustand
+// Optionaler Eigenschaftszugriff und Standardwert
+antwort2 = ANFR("GET", "https://example.com")
+zeig antwort2?.kopf["Content‑Type"] ?? "unbekannt"
+// Warte‑Anweisung mit Timeout‑Fallback‑Wert
+ergebnis = warte ac_ANFR("GET", "https://api.example.com") mit Zeit 3000 sonst "Fehler"
+// Auf mehrere Future‑Objekte gleichzeitig warten; Ergebnis‑Array zurückgeben
+future1 = ac_ANFR("GET", "https://api1.com")
+future2 = ac_ANFR("GET", "https://api2.com")
+ergebnisse = warte [future1, future2]
+
+// HTTP‑Server starten (starteServer / ac_starteServer)
+// ────────────────────────────────────────────────────────────────────────────
+// Die Handler‑Funktion erhält ein anfrage‑Objekt:
+//   anfrage.methode  - HTTP‑Methode ("GET" / "POST" / "HEAD" / "PUT" / …)
+//   anfrage.pfad     - vollständiger Anfrage‑Pfad inklusive Query‑String
+//   anfrage.kopf     // Anfrage‑Header als Objekt mit String‑Schlüsseln
+//   anfrage.inhalt   // unparsierter Anfrage‑Body‑String
+//
+// Die Handler‑Funktion muss ein Antwort‑Objekt zurückliefern:
+//   { zustand: Statuscode, kopf: { … Antwort‑Header … }, inhalt: Antwort‑Body }
+//
+// eingebaute Konstruktor‑Funktionen für Antworten (setzen automatisch Content‑Type):
+//   html(s [, status])        ‑ HTML‑Antwort (Content‑Type: text/html; charset=utf‑8)
+//   json(v [, status])        ‑ JSON‑Antwort (Content‑Type: application/json; charset=utf‑8)
+//   text(s [, status])        ‑ Klartext‑Antwort (Content‑Type: text/plain; charset=utf‑8)
+//   umleiten(url [, status])  ‑ HTTP‑Umleitung; Standard‑Statuscode 302, weitere: 301 / 303 / 307 / 308
+//
+// Hilfsfunktionen zur Anfrage‑Verarbeitung:
+//   abfrage(url)              ‑ Query‑String parsen → Objekt {schlüssel: wert, …}
+//   formular(body)            ‑ application/x‑www‑form‑urlencoded Body parsen
+//   esc(s)                    ‑ HTML‑Entity‑Escaping: & < > " ' ersetzen
+//   kodierURL(s)              ‑ URL‑Prozent‑Kodierung
+//   dekodierURL(s)            ‑ URL‑Prozent‑Dekodierung
+//
+// SSE‑Ereignis‑Streams (Server‑Sent Events):
+//   SSE()                     ‑ neues Stream‑Objekt erzeugen
+//   sende(stream, daten)      ‑ Nachricht senden; automatisch "data:"‑Prefix hinzufügen
+//   sendeSSE(stream, ereignis, daten)‑ benannter Ereignis‑Typ senden; leerer ereignis‑Parameter verhält sich wie sende
+//   schliesse(stream)         ‑ Stream schließen; Client‑EventSource bekommt EOF‑Signal
+//
+// Hinweis: Der Handler‑Code darf nicht blockieren. SSE‑Daten‑Producer müssen in ac fkt‑Funktionen ausgeführt werden, sonst bleibt der MHD‑Thread hängen und die Antwort wird nie an den Client übermittelt.
+// ────────────────────────────────────────────────────────────────────────────
+// holeIP()‑Rückgabe‑Struktur
+{
+  "host": "192.168.1.42",         // bevorzugte lokale IPv4‑Adresse des Host‑Systems
+  "lokal": "127.0.0.1",           // Loopback‑Adresse
+  "ipv4": ["192.168.1.42", "10.0.0.3"],
+  "ipv6": ["2001:db8::1", ...]
+}
+// holeIP(anfrage) mit Anfrage‑Objekt als Parameter:
+{
+  "client": "203.0.113.7",        // IP‑Adresse des aufrufenden Clients
+  "client_lokal": 0,              // 1 bei Loopback‑/lokaler Anfrage, sonst 0
+  "host": "192.168.1.42",
+  "lokal": "127.0.0.1",
+  "ipv4": ["192.168.1.42", ...]
+}
+
+// Beispiel 1: einfacher HTTP‑Router mit GET‑Routen, Query‑Parametern
+fkt handler(anfrage) {
+    url    = anfrage.pfad
+    params = abfrage(url)               // Query‑Parameter als Objekt
+    qm     = url.stelleVon("?")
+    pfad   = qm == -1 ? url : url.ab(0, qm)
+    fa pfad == "/" {
+        titel = params.titel ?? "Welt"
+        gib html(`
+            <!DOCTYPE html>
+            <html lang="de">
+            <head>
+                <meta charset="utf‑8">
+                <title>Kernregel</title>
+                <style>
+                    body { font‑family: sans‑serif; margin: 2em; }
+                    h1   { color: #2a6; }
+                    code { background: #eee; padding: 2px 4px; border‑radius: 3px; }
+                </style>
+            </head>
+            <body>
+                <h1>Hallo &{esc(titel)}!</h1>
+                <p>Pfad: <code>&{esc(pfad)}</code></p>
+                <p>Suche: <code>&{esc(params.suche ?? "—")}</code></p>
+                <ul>
+                    <li><a href="/daten?x=1&y=2">/daten?x=1&y=2</a> (JSON)</li>
+                    <li><a href="/text?name=Max">/text?name=Max</a> (Klartext)</li>
+                    <li><a href="/alt">/alt</a> (Weiterleitung → /)</li>
+                </ul>
+            </body>
+            </html>
+        `)
+    }
+    snfa pfad == "/daten" {
+        gib json({
+            pfad: pfad,
+            parameter: params,
+            zeit: zeit(),
+            gefunden: wahr
+        })
+    }
+    snfa pfad == "/text" {
+        gib text("Hallo " ## (params.name ?? "Welt") ## "!\n")
+    }
+    snfa pfad == "/alt" {
+        gib umleiten("/", 302)
+    }
+    sonst {
+        gib html(`
+            <h1>404 ‑ Nicht gefunden</h1>
+            <p>Angefragt: <code>&{esc(url)}</code></p>
+        `, 404)
+    }
+}
+starteServer(8080, handler)
+
+// Beispiel 2: Formular‑Verarbeitung mit POST‑Methode (PRG‑Muster)
+fkt formHandler(anfrage) {
+    fa anfrage.pfad == "/anmelden" und anfrage.methode == "GET" {
+        gib html(`
+            <form method="post" action="/anmelden">
+                <p>Benutzer: <input name="benutzer"></p>
+                <p>Passwort: <input name="passwort" type="password"></p>
+                <button type="submit">Anmelden</button>
+            </form>
+        `)
+    }
+    snfa anfrage.pfad == "/anmelden" und anfrage.methode == "POST" {
+        daten  = formular(anfrage.inhalt)
+        nutzer = daten.benutzer ?? ""
+        pass   = daten.passwort ?? ""
+        fa nutzer == "" od pass == "" {
+            gib text("Benutzername und Passwort erforderlich", 400)
+        }
+        fa nutzer == "admin" und pass == "geheim" {
+            // PRG‑Muster: POST → Weiterleitung auf GET‑Seite, um Doppel‑Submit bei Aktualisierung zu verhindern
+            gib umleiten("/willkommen?name=" ## kodierURL(nutzer), 303)
+        }
+        gib html("<p>Anmeldung fehlgeschlagen</p>", 401)
+    }
+    snfa anfrage.pfad == "/willkommen" {
+        name = abfrage(anfrage.pfad).name ?? "Gast"
+        gib html("<h1>Willkommen, &{esc(name)}!</h1>")
+    }
+    sonst {
+        gib text("Nicht unterstützt", 405)
+    }
+}
+// starteServer(8081, formHandler)
+
+// Beispiel 3: SSE‑Ereignis‑Stream‑Demo
+fkt sseHandler(anfrage) {
+    fa anfrage.pfad == "/" {
+        gib html(`
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf‑8"><title>SSE Demo</title></head>
+            <body>
+                <h1>Server‑Log</h1>
+                <div id="log"
+                     style="background:#111;color:#0f0;padding:1em;
+                            height:300px;overflow:auto;font‑family:monospace"></div>
+                <script>
+                    const es  = new EventSource("/stream");
+                    const log = document.getElementById("log");
+                    es.onmessage = e => {
+                        log.innerHTML += e.data + "<br>";
+                        log.scrollTop = log.scrollHeight;
+                    };
+                    es.addEventListener("fertig", () => {
+                        log.innerHTML += "<i>[Stream beendet]</i><br>";
+                        es.close();
+                    });
+                </script>
+            </body>
+            </html>
+        `)
+    }
+    snfa anfrage.pfad == "/stream" {
+        s = SSE()
+        // Der Daten‑Producer muss asynchron laufen; sonst blockiert er den HTTP‑Thread
+        ac fkt producer(stream) {
+            für i in 1..10 {
+                sendeSSE(stream, "log " ## i ## " — " ## datum())
+                sleep(500)                  // Millisekunden‑Pause
+            }
+            sendeSSE(stream, "fertig", "done")  // fertiges‑Ereignis an Client senden
+            schliesse(stream)
+        }
+        producer(s)                          // Producer‑Task starten, Funktion kehrt sofort zurück
+        gib s                                // Stream‑Objekt an den MHD‑Server übergeben
+    }
+    sonst {
+        gib html("<h1>404</h1>", 404)
+    }
+}
+|/
+// ============================================================================
+// Interoperabilität mit C++‑Code
+// ============================================================================
+/|
+cpp("
+#include <iostream>
+int main() \{
+    std::cout << \"Hello from C++!\";
+    return 42;
+}")                                             // C++‑Quelltext kompilieren und ausführen; Rückgabe‑Objekt {ok: Exit‑Code, code: Rückgabewert, erg: Standard‑Ausgabe‑String, fehl: Fehlerausgabe}
+cpp("", {
+    flags: "-std=c++17 -O2 -lcurl -lpthread"    // zusätzliche Compiler‑ und Linker‑Flags
+})
+// Variablen aus Kernregel an C++‑Code übergeben
+name = "Welt"
+zahlen = [1, 2, 3]
+// Aufruf von cpp‑Funktion mit JSON‑Daten‑Austausch
+c_erg = cpp(`
+#include <iostream>
+int main(int arga, char* argv[]) {
+    if (arga < 2) return 1;
+    auto input = JSON::parse_from_file(argv[1]);
+    
+    std::string name = KR::get(input, "name").as_string();
+    auto arr = KR::get(input, "zahlen").as_array();
+    
+    int sum = 0;
+    for (auto& v : arr) sum += v.as_int();
+    
+    JSON output;
+    output["gruss"] = "Hallo " + name + "!";
+    output["summe"] = static_cast<long long>(sum);
+    KR::set(output, "neue_var", 42);
+    KR::set(output, "name", "Neuer Name");
+    
+    std::cout << output.serialize() << std::endl;
+    return 0;
+}
+`,
+{
+    "mode": "json",
+    "bind": { "name": name, "zahlen": zahlen },
+    "timeout": 5000
+})
+zeig name
+zeig c_erg.gruss
+zeig c_erg.summe
+// Ausgabe:
+// Neuer Name
+// Hallo Welt!
+// 6
+|/
+// Weitere Inline‑Ausführung von Assembler‑Code
+/|
+asm(``)                             // Assembler‑Quelltext ausführen
+|/
+// ============================================================================
+// Niedrig‑Stufen‑Präprozessor‑Funktionen und Makros
+// ============================================================================
+/|
+// Präprozessor‑Makro‑Definitionen, werden schon beim Parsen ausgewertet
+#makro DEBUG 1                      // Makro definieren; auch mit Parametern #makro DEBUG(a,b); Zeilenfortsetzung mit \
+#fa DEBUG                           // bedingte Kompilierung: Bedingung wahr?
+    zeig "Debug‑Modus aktiv"
+#fan                                // Negierte Bedingung
+#snfa                               // else‑if für Präprozessor
+#sonst                              // else‑Zweig
+#endfa                              // Ende des bedingten Blocks
+#r DEBUG                            // Makro‑Definition löschen
+#r "Func"                           // lexikal‑Alias‑Eintrag entfernen
+
+// Automatisch registrierte System‑Makros (Plattform‑, Architektur‑, Compiler‑Informationen)
+| Diese Makros werden beim Start des Kr‑Interpreters automatisch erstellt und können mit #fa / #fan abgefragt werden.
+| Sie können überschrieben oder gelöscht werden. Außerhalb von Präprozessor‑Anweisungen sind sie boolesche Werte (1 / 0).
+|
+| Betriebssystem‑Makros:
+|   WIN_32          entspricht _WIN32 (32‑ und 64‑Bit‑Windows sind definiert; MinGW / MSVC kompatibel)
+|   WIN_64          nur bei 64‑Bit‑Windows gesetzt
+|   WINDOWS         Alias für WIN_32
+|   LINUX           Linux‑Systeme (auch Android‑Umgebungen)
+|   MACOS           macOS‑Systeme (Darwin‑Basis)
+|   UNIX            alle Unix‑artigen Systeme: Linux / macOS / BSD / Android
+|   FREEBSD         FreeBSD‑Betriebssystem
+|   OPENBSD         OpenBSD
+|   NETBSD          NetBSD
+|   ANDROID         Android‑NDK‑Build; zusätzlich sind LINUX und UNIX definiert
+|
+| CPU‑Architektur‑Makros:
+|   ARCH_X86_64     x86‑64 / AMD64
+|   ARCH_X86        32‑Bit x86
+|   ARCH_ARM64      AArch64 / ARM64
+|   ARCH_ARM        32‑Bit ARM
+|   ARCH_RISCV      RISC‑V‑Architektur
+|   ARCH_PPC64      PowerPC 64‑Bit
+|   ARCH_64         beliebige 64‑Bit‑Architektur
+|   ARCH_32         beliebige 32‑Bit‑Architektur
+|
+| Pointer‑Bitbreite:
+|   BITS_32         32‑Bit‑Zeiger
+|   BITS_64         64‑Bit‑Zeiger
+|
+| Compiler‑Makros:
+|   COMPILER_GCC    GCC / G++
+|   COMPILER_CLANG  LLVM‑Clang
+|   COMPILER_MSVC   Microsoft Visual‑C++
+|
+| Interpreter‑Kennzeichnungen:
+|   CPLUSPLUS       wird bei Kompilierung innerhalb eines C++‑Compilers gesetzt (__cplusplus)
+|   KR              immer vorhanden, Kennzeichen des Kernregel‑Interpreters
+|   KR_MAJOR        Versions‑Bestandteile
+|   KR_MINOR
+|   KR_PATCH
+|
+|   DEBUG            Nur im Debug-Modus definiert
+|   stderg          0 (Standard‑Ausgabe‑Kennwert)
+|   srdfehl         1 (Standard‑Fehler‑Ausgabe‑Kennwert)
+
+// Beispiel für plattformspezifischen Quelltext
+#fa WIN_32
+    zeig "Läuft unter Windows"
+#snfa LINUX
+    zeig "Läuft unter Linux"
+#snfa MACOS
+    zeig "Läuft unter macOS"
+#sonst
+    zeig "Unbekanntes Betriebssystem"
+#endfa
+
+// Bitbreiten‑Prüfung
+#fa BITS_64
+    zeig "64‑Bit‑System"
+#sonst
+    zeig "32‑Bit‑System"
+#endfa
+
+// Logische Kombinationen in Präprozessor‑Bedingungen: ! && || () sowie Vergleichs‑Operatoren != <= etc.
+#fa WIN_32 && BITS_64
+    zeig "64‑Bit‑Windows‑System"
+#endfa
+
+#fa (LINUX || MACOS) && !ANDROID
+    zeig "Desktop‑Unix‑System"
+#endfa
+
+// #fan negiert den gesamten logischen Ausdruck
+#fan ARCH_X86 || ARCH_X86_64
+    zeig "Keine x86‑Architektur"
+#endfa
+
+// Kombination aus Compiler‑ und Plattform‑Bedingung
+#fa COMPILER_GCC && LINUX
+    zeig "GCC‑Compiler unter Linux"
+#endfa
+
+// Versions‑bedingter Code
+#fa KR_MAJOR == 0 && KR_PATCH >= 1000
+    zeig "{KR_MAJOR}.{KR_MINOR}.{KR_PATCH}"
+#endfa
+
+// Makro überschreiben und löschen
+#makro WIN_32 1                     // System‑Makro überschreiben (praktisch nutzlos, aber erlaubt)
+#r WIN_32                           // Makro löschen; danach ist #fa WIN_32 falsch
+#makro WIN_32 1                     // Benutzerdefiniertes Makro wiederherstellen
+#r WIN_32
+
+// Beispiel‑Funktions‑Makros
+#makro ADD(a, b) (a + b)
+#makro GREET(name) "Hallo " + name + "!"
+
+// lexikal‑Schlüsselwort‑Alias‑Definitionen; für Unterrichtszwecke; unterstützt mehrere Aliase pro Schlüsselwort
+// Am Ende kann eine Typ‑Markierung mit # hinzugefügt werden, die die dynamische Syntax‑Hervorhebung steuert
+// Unterstützte Typ‑Tags: # erkl, # fkt, # def, # ausf, # typ, # klas, # imp, # aufz, # als, # zahl, # text, # pass, # meth, # name, # var
+//
+// Regeln für die Ersetzung:
+// [Reiner‑Bezeichner‑Schlüssel] z.B. "let", "for"
+//      Ersetzung findet nur außerhalb von Strings, Zeichen‑Literalen und Backtick‑Strings statt; links und rechts dürfen keine Bezeichner‑Zeichen folgen.
+//
+// [Gemischter‑Schlüssel‑String] enthält Symbole, Leerzeichen etc. z.B. "###", "@@"
+//      Ersetzung findet überall statt (auch innerhalb von Strings); ein vorangestellter \ schützt vor Ersetzung.
+//      Mehrfache Ersetzungs‑Durchläufe bis keine weiteren Änderungen mehr auftreten.
+
+lexikal {
+    "let"               = "der"     # erkl
+    "for"               = "für"     # ausf
+    "if"                = "fa"      # ausf
+    "def"               = "fkt"     # def
+    "function"          = "fkt"     # def
+    "async function"    = "ac fkt"  # def
+    "class"             = "klass"   # typ
+    "global"            = "global"  # aufz
+}
+
+// Beispiel für Symbol‑Alias (gemischter Schlüssel)
+lexikal {
+    "###" = "zeig"  # ausf
+    "@@"  = "%%"    # text
+}
+### 1 + 1                       // expandiert zu zeig 1 + 1
+zeig "Wert: @@", 42             // @@ wird auch innerhalb des Strings ersetzt → zeig "Wert: %%", 42
+zeig "Wert: \@@", 42            // \@@ ist geschützt → bleibt unverändert "Wert: \@@"
+
+// Mehrstufige Ersetzung mit Backslash‑Behandlung
+lexikal {
+    "\\\\" = "\\"
+    "@@"   = "%%"
+}
+// \\@@ → erster Durchlauf \\ wird zu \, danach @@ wird zu %% → Ergebnis: \%%
+// \@@ → Backslash schützt @@, bleibt unverändert
+
+ergebn = ADD(3, 5)                  // expandiert zu (3 + 5)
+nachricht = GREET("Anna")           // expandiert zu "Hallo " + "Anna" + "!"
+
+// Token‑ und AST‑Debug‑Funktionen
+tokens()                            // Token‑Informationen einer Zeile oder eines Bereichs liefern
+tokens([2, 4])                      // Zeilen 2 bis 4
+tokens([1, 3], [3, 7])              // Rechteck‑Bereich von Zeile/Spalte (1,3) bis (3,7)
+worte(5)                            // nur Bezeichner‑Token der Zeile 5
+worte([2, 4])                       // Bezeichner‑Token Zeilen 2‑4
+ast(1 + 1)                          // AST‑Baum eines Ausdrucks ausgeben
+zeile()                             // aktuelle Zeilennummer liefern (Ganzzahl)
+zeile("s")                          // aktuelle Spaltennummer
+zeile("a")                          // "Zeile:Spalte" als Zeichenkette
+#zeile 1 "";                        // Präprozessor‑Befehl: Zeilennummer und Dateiname manuell setzen; Semikolon ist erforderlich
+fname()                             // Name der aktuell ausgeführten Quelldatei
+
+// System‑Fehler‑ und Warnungs‑Funktionen
+KRFehl("Fehlertext", 1, 2, "kr", "a", "a") // System‑Fehler werfen; Zeile, Spalte, Dateiname, Kontext‑Informationen optional
+KRWarn("Warnungstext", 1, 2, "kr")         // System‑Warnung ausgeben
+
+// Objekt‑Form von KRFehl mit detaillierten Fehlermeldungen
+KRFehl({
+    "info": "Variable 'y' wurde im aktuellen Gültigkeitsbereich nicht deklariert",
+    "zel": 3,
+    "spl": 9,
+    "name": "main.kr",
+    "hint": "Initialisiere Variable 'y' mit einer Ganzzahl",
+    "rueck": 0,                     // Stack‑Rücksprung‑Ebene
+    "kont": `
+x = 1
+e = x + y
+zeig e`
+})
+
+KRWarn("Variable 'x' deklariert aber nie benutzt", 1, 2, "main.kr")
+
+// Programm‑Ausführung beenden
+ende(0)                             // Programm sofort beenden; Exit‑Code‑Wert optional; Synonym exit()
+gib;                                // gib auf oberster Ebene beendet ebenfalls das Programm, liefert aber keinen Exit‑Code
+|/
+// ============================================================================
+// Sonstige Sprach‑Funktionen
+// ============================================================================
+n = null ?? 42                      // Null‑Kombinierer, Ergebnis 42
+
+// Tasten‑Eingabe‑Bindungen
+/|
+bind "1" { zeig "Option 1 ausgewählt" }
+bind "\x1b" { zeig "Esc‑Taste gedrückt" }
+bind "Esc" { zeig "Esc‑Taste" }
+bind "Q", "q" { zeig "Programm beenden" }
+taste()                             // synchron auf Tastendruck warten
+ac_taste("Esc")                     // asynchroner Listener für Taste
+taste_g("Esc")                      // asynchronen Listener starten
+ac_taste("Esc", "stop")             // Listener wieder stoppen
+
+// Beispiel‑Schleife für Tasteneingabe
+indes wahr {                        // wahr = boolesch wahr; fals = boolesch fals
+    zeig "Drücke 1, 2 oder Q: "
+    eingabe = taste()
+    drücke(eingabe)
+    fa eingabe == "Q" {
+        bruch
+    }
+}
+|/
+// ============================================================================
+// Lag‑Bibliotheks‑Module (Standard‑Bibliothek)
+// ============================================================================
+/|
+1.  lexikal‑en / lexikal‑zh / lexikal‑ja ‑ Schlüsselwort‑Übersetzungen
+    Englische, chinesische, japanische Schlüsselwort‑Aliase. Nach importieren kann man statt deutscher Schlüsselwörter
+    z.B. let / const / if / def oder chinesische Schlüsselwörter verwenden; sie werden automatisch auf die Kern‑Schlüsselwörter abgebildet.
+    lexikal‑de: deutsche vollständige Schlüsselwörter; lexikal‑wen: altchinesische Schlüsselwörter.
+    Das Makro LEX_EN_SYM 1 aktiviert zusätzlich Symbol‑Alias‑Ersetzungen.
+
+2.  text ‑ Zeichenketten‑Vergleich‑Werkzeuge
+    verg: lexikografischer Vergleich; nverg: Vergleich nur bis n Zeichen; iverg: Groß‑Kleinschreibungs‑unabhängiger Vergleich;
+    findc: erste Position eines Substrings; abstandQm: quadrierter euklidischer Abstand. Alle Funktionen behandeln null‑Werte sicher.
+
+3.  math ‑ Mathematische Konstanten und Hilfs‑Funktionen
+    Hochgenaue Konstanten pi / pi32 / pi64 / pi128 / pi256, e, τ, φ, ln2, ln10, sqrt2, sqrt3, sqrt5.
+    Kombinatorik: binom‑Binomialkoeffizient, perm‑Permutation; gcd‑größter gemeinsamer Teiler, lcm‑kleinstes gemeinsames Vielfaches, isPrim‑Primzahl‑Prüfung.
+    Statistik‑Funktionen: mean‑Mittelwert, varianz‑Varianz, spbVarianz‑Stichproben‑Varianz, stabw‑Standardabweichung, spbstabw‑Stichproben‑Standardabweichung, logFak‑Log‑Fakultät nach Stirling‑Näherung.
+    Element‑Daten aller chemischen Elemente; Zugriff über Variablen wie H, He, Li oder elemente[Ordnungszahl] / elem[Ordnungszahl].
+
+4.  c_meth ‑ C‑ / Java‑ähnliche Methoden‑Bibliothek
+    printf, fprintf, snprintf etc. Logger‑Klasse mit statischen Methoden out, err, info, debug, warn, error.
+    Einfache C/C++‑Code‑Konvertierung und Ausführung; ausf_C / ausf_C_teilen / ausf_C_text / ausf_C_teilen_text.
+
+5.  py_meth ‑ Python / JavaScript‑ähnliche Hilfs‑Funktionen
+    print, input, dict, sorted, sum, min, max, round; console‑Klasse mit log, err; Enum‑Typ‑Implementierung.
+|/
+// ============================================================================
+// Verwirrt‑Untersprache (direkt ausführbar)
+// ============================================================================
+// Verwirrt hat keine festen Schlüsselwörter, arbeitet nur mit Symbolen, Zahlen und Bezeichnern
+// Kann alle Kernregel‑Funktionen und Variablen aufrufen, einige komplexe Typen werden nicht unterstützt
+// Unicode‑Zeichen werden unterstützt
+// Aufruf als Bibliotheks‑Funktion: vw(`...`)
+<--vw-->                        // Beginn des VW‑Code‑Blocks
+x = 1                           // Zuweisung
+x = 1.1                         // Gleitkommazahl
+x ? 1 : 2                       // ternärer Bedingungsoperator
+arr = []                        // Array‑Literal
+obj = {}                        // Objekt‑Literal
+// kombinierte Zuweisungen
+x += 1
+x -= 1
+x *= 1
+x /= 1
+x %= 1
+x ^= 1
+// logische Operatoren
+// |    logisches ODER
+// &    logisches UND
+// !    logische Negation
+// >    größer‑als‑Vergleich
+// <    kleiner‑als‑Vergleich
+// ==   Gleichheits‑Vergleich
+?> x == 1 | x >= 2 >> x = x + 1 // if x == 1 || x >=2 then x = x+1
+|> x < 1 >> x = x + 2           // else‑if‑Zweig
+!> x = 0                        // else‑Zweig
+// eingerückte Schleifen‑Blöcke
+# x < 10 >>                     // while‑Schleife
+    x = x + 1
+## x # 1..10 >>                 // for‑Schleife über einen Bereich
+    ^^                          // continue‑Sprung
+    ~~                          // break‑Sprung
+1 + 1                           // Addition
+1 - 1                           // Subtraktion
+1 * 1                           // Multiplikation
+1 / 1                           // Division
+2 * (1 + 1)                     // Klammer‑Ausdruck
+1 % 1                           // Modulo‑Rest
+1 ^ 1                           // Potenz‑Berechnung
+@ main(a, b):                   // Funktions‑Deklaration
+    a + b
+    @^ 0                        // explizite Rückgabe; Standard‑Rückgabewert ist 0
+// \x\                          // Konsolen‑Ausgabe
+<---->                          // Ende des VW‑Code‑Blocks
+
+// ============================================================================
+// VSE‑Standard‑Architektur‑64‑Assembler‑Anbindung
+// ============================================================================
+// Variablenübergabe am besten über &{...}‑String‑Interpolation; direkte Variablenübergabe ist nicht nativer Bestandteil
+// Code wird interpretiert, nutzt physikalische Register und führt Maschinen‑Code‑Befehle aus
+// Unicode‑Bezeichner sind erlaubt
+// Rückgabe‑Objekt erg = <--va--> ... <----> liefert {code: Quelltext, erg: Ergebniswert, fehl: Fehlermeldung, abnorm: boolescher Abbruch‑Flag}
+// Aufruf als Bibliotheks‑Funktion: va(`...`)
+<--va-->
+; ============================================================================
+; VSE Standard Architecture ‑ 64‑Bit‑Assembler (.va‑Quellcode)
+; Kommentare beginnen mit Semikolon
+; Projektbeginn: 2026‑08‑24
+; ============================================================================
+; ----------------------------------------------------------------------------
+; Register‑Übersicht (Groß‑ / Kleinschreibung egal)
+;   r1  = RAX   r2  = RCX   r3  = RDX   r4  = RBX
+;   r5  = RSP   r6  = RBP   r7  = RSI   r8  = RDI
+;   r9  = R8    r10 = R9    r11 = R10   r12 = R11
+;   r13 = R12   r14 = R13   r15 = R14   r16 = R15
+; ----------------------------------------------------------------------------
+; ---------- Daten‑Definitionen ----------
+msg:    db "Hallo Welt!", 0      ; Null‑terminierte Zeichenkette
+puffer: dq 0, 0, 0, 0            ; 32‑Byte‑Datenpuffer für Speicherzugriff‑Beispiele
+zahl:   dq 42                    ; 64‑Bit‑Ganzzahl‑Wert
+hexwer: db 0xFF, 0x0A            ; zwei Byte‑Werte: 255 und 10
+arr:    dd 1, 2, 3, 4            ; vier 32‑Bit‑Ganzzahlen
+wort:   dw 0x1234                ; 16‑Bit‑Wert
+; ---------- Programm‑Einstiegspunkt fest: _start ----------
+_start:
+    ; ---------- Daten‑bewegen der‑Befehl ----------
+    der r1, puffer          ; r1 erhält die Laufzeit‑Adresse von puffer
+    der r2, 100             ; Sofortwert in Register schreiben
+    der [r1], r2            ; Speicher: *(int64*)r1 = 100
+    der r3, [r1]            ; Speicher lesen: r3 = *(int64*)r1 → 100
+    ; Speicherzugriff mit Offset
+    der r2, 200
+    der [r1+8], r2
+    der r4, [r1+8]          ; r4 = 200
+    ; ---------- Arithmetische Befehle ----------
+    add r1, 3               ; r1 += 3
+    sub r4, r2              ; r4 -= r2
+    ink r1                  ; r1++ Inkrement
+    dek r4                  ; r4‑‑ Dekrement
+    ; ---------- Multiplikation ein‑Operand‑Form ----------
+    mul r4                  ; r1 = r1 * r4; impliziter Operand r1; Ergebnis in r1; zerstört r1 und r3
+    ; ---------- Multiplikation mehr‑Operand‑Form ----------
+    mul r4, r2              ; r4 = r4 * r2 (zwei‑Operand, signierte Multiplikation, nur Zielregister verändert)
+    mul r13, r1, 3          ; r13 = r1 * 3 (drei‑Operand‑Form)
+    mul r14, r1, r2, r4     ; beliebig viele Operanden für Ketten‑Multiplikation
+    mul r7, r1, r2, 5, r4
+    der r3, 0               ; r3 (RDX) auf Null setzen
+    ; ---------- Division ein‑Operand‑Form ----------
+    div r2                  ; r1 = r1 / r2, r3 = r1 % r2; 128‑Bit‑Dividend aus r1:r3; vorzeichenlose Division
+    ; ---------- Division mehr‑Operand‑Form ----------
+    div r4, r2                          ; r4 = r4 / r2; Rest wird verworfen
+    div r15, r1, r2                     ; r15 = r1 / r2
+    div r16, r7, r1, r2                 ; r16 = r1 / r2, Rest kommt nach r7
+    ; Hinweis mehr‑Operand div: vorzeichenlos; Divisor kann Register, Sofortwert oder Speicheradresse sein.
+    ; ---------- Bit‑Operationen ----------
+    und r1, 0xFF            ; r1 &= 0xFF Bit‑UND
+    od  r4, r2              ; r4 |= r2 Bit‑ODER
+    xod r1, 5               ; r1 ^=5 Bit‑XOR
+    nich r1                 ; r1 = ~r1 Bit‑Negation
+    ; ---------- Vergleich‑Befehl, Ergebnis landet in r3 ----------
+    vgl r1, 10              ; vergleiche r1 und 10
+                            ; r3 = 0 bei Gleichheit; 1 bei r1>10; ‑1 bei r1<10
+    ; ---------- Bedingte Sprünge (abhängig von r3‑Ergebnis von vgl) ----------
+    spr marke1              ; unbedingter Sprung
+    sn  marke2              ; springe falls r3 ==0 (gleich)
+    snn marke3              ; springe falls r3 !=0 (ungleich)
+    sg  marke4              ; springe falls r3 ==1 (größer)
+    sk  marke5              ; springe falls r3 ==‑1 (kleiner)
+    sge marke6              ; springe falls r3 >=0 (größer‑gleich)
+    ske marke7              ; springe falls r3 <=0 (kleiner‑gleich)
+marke1:
+    ; ---------- Unterprogramm‑Aufruf mit ruf und gib‑Rückkehr ----------
+    ruf unterprog           ; Unterprogramm aufrufen; Rücksprung‑Adresse wird auf Stack abgelegt
+    spr ende_s              ; zum Programm‑Ende springen
+unterprog:
+    ; ---------- Stack‑Operationen drk / hol ----------
+    drk r1                  ; Register‑Wert auf Stack pushen
+    hol r4                  ; Wert vom Stack in Register holen
+    gib                     ; Rückkehr zum Aufruf‑Ort nach ruf
+    ; ---------- Software‑Interrupt unt 0x80 ----------
+    der r1, 1               ; Funktionscode 1: Prozess beenden
+    unt 0x80
+    ; ---------- Konsolen‑String‑Ausgabe zeig ----------
+    zeig msg
+    ; ---------- Programm‑Ende‑Befehl ende ----------
+    ende
+marke2:
+marke3:
+marke4:
+marke5:
+marke6:
+marke7:
+    ; Beispiel‑Zähl‑Schleife
+    der r1, 0
+schleife:
+    vgl r1, 10
+    sge ende_s
+    ink r1
+    spr schleife
+ende_s:
+    ende
+    ; Zusätzliche Befehle
+    ugib                    ; Interrupt‑Rückkehr; entspricht x86‑64 IRETQ
+    in  r1, 0x60            ; Byte von IO‑Port 0x60 einlesen
+    erg 0x60, r1            ; Byte‑Wert auf IO‑Port 0x60 ausgeben
+; ============================================================================
+; Hinweise zur VSE‑64‑Assembler‑Sprache
+; 1. Der Einstiegspunkt ist fest _start; Ausführung läuft von oben nach unten; Sprünge ändern den Programm‑Counter.
+; 2. Unterprogramme werden mit ruf aufgerufen und mit gib verlassen. Der Hauptcode darf kein gib benutzen; nutze ende zum Beenden.
+; 3. Daten‑Labels (z.B. msg) sind nur für Speicher‑Zugriff / zeig‑Befehl gedacht, dürfen nicht als Sprung‑Ziel verwendet werden.
+; 4. Bedingte Sprünge werten ausschließlich das Ergebnis aus dem vorherigen vgl‑Befehl in Register r3 aus.
+; 5. Speicher‑Adressierung: [reg+versatz] oder [reg‑versatz]; versatz ist 64‑Bit‑Ganzzahl.
+; 6. Zahlen: Dezimal‑ oder Hexadezimal‑Notation 0x…; immer 64‑Bit‑vorzeichenbehaftet.
+; 7. Im Interpreter‑Modus unterstützt unt 0x80 nur Funktionscode 1 (Beenden) und 4 (Konsolen‑Ausgabe). Im kompilierten ‑c exe‑Modus werden zeig und ende zu WinAPI‑Aufrufen umgewandelt (nur Windows).
+; ============================================================================
+<---->
+
+; Befehls‑Übersetzungstabelle von x86‑Assembler‑Mnemonik nach VSE‑Befehle
+/|
+{
+    MOV: der,
+    ADD: add,
+    SUB: sub,
+    MUL: mul,
+    DIV: div,
+    INC: ink,
+    DEC: dek,
+    AND: und,
+    OR: od,
+    XOR: xod,
+    NOT: nich,
+    CMP: vgl,
+    JMP: spr,
+    JZ: sn,
+    JNZ: snn,
+    JG: sg,
+    JL: sk,
+    JGE: sge,
+    JLE: ske,
+    CALL: ruf,
+    RET: gib,
+    PUSH: drk,
+    POP: hol,
+    INT: unt,
+    PRINT: zeig,
+    EXIT: ende,
+    IRET: ugib,
+    IN: in,
+    OUT: erg,
+    
+    DB: db,
+    DW: dw,
+    DD: dd,
+    DQ: dq
+}
+|/
+// ============================================================================
+// Dokument‑Ende
+// ============================================================================
+nutz _
+zeig "kernregel!"

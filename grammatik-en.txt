@@ -1,0 +1,1778 @@
+/|
+| Kernregel(.kr) Language Grammar Examples
+| C++ VM‑type
+| Uncomment the commented‑out code below to enable it (commented only to avoid extra output during testing)
+| Function names, variable names and identifiers support Unicode characters
+| For consistent syntax, avoid non‑default optional keywords
+| Kr supports indentation‑style syntax (any indent deeper than parent block is valid); keep style consistent:
+| if parent uses curly braces {}, child blocks must also use braces, otherwise syntax errors occur.
+| Lexikal preprocessor does NOT support indent‑based syntax (preprocessing forbids ambiguity)
+| Kr uses function scope; the für jedes loop creates new local scope; other loop constructs do not.
+| All Kern code except memory operations is valid Kernregel code; execution behavior is nearly identical but logical semantics differ.
+| VS Code syntax highlighting and lexikal semantic highlighting extensions are available.
+| Semantic highlighting invokes the Kr interpreter to retrieve AST and token info, providing error diagnostics and identifier details.
+|
+| Without optimizations: empty loop ~4 ms for one‑million iterations; loop body with one increment ~17 ms, roughly equivalent to 100 million VA‑loop cycles.
+| v0.0.19xx Warning: VM mode may be less stable than pure interpreter mode.
+|
+| Project started: 2026‑06‑28
+|/
+// ============================================================================
+// Execution Commands
+// ============================================================================
+/|
+kr <File.kr>                   // Open and execute script file
+kr --opt                       // Custom execution options
+kr --verf                      // Print AST at runtime / compile‑time
+kr --lex                       // Stop after parsing; return JSON errors, preprocessor macros and metadata
+kr -k                          // Direct interactive input mode (quick evaluation, not recommended for general use)
+kr -p                          // Get directory path of kr.exe
+kr -w                          // Enable warning messages
+kr -v <N> -n <M>                // Custom context line count for error reports
+kr -t                          // Measure execution elapsed time
+kr -O                          // Turn on optimizations
+kr -i                          // Pure‑AST interpreter mode
+kr -d                           // DEBUG mode, DEBUG macro is automatically defined as 1
+// Custom execution options
+--opt "{haupt: main}"                       // Set entry‑point function as main; main will run automatically without explicit call inside source
+--opt "{haupt: main, args: [42, "world", true]}" // Invoke entry‑point with arguments
+--opt "{haupt: main, klass: Main}"          // Entry‑point is static main function inside class Main
+--opt "{ast: true}"                         // Dump full AST nodes without running code
+--opt "{ast: {st: 8, end: 8}}"              // Dump AST only for specified source line range, skip execution
+|/
+// ============================================================================
+// Command‑Line Arguments
+// ============================================================================
+/|
+| When running a Kr program you may append arbitrary space‑separated arguments after script filename.
+| These are automatically exposed as two global read‑only constants:
+|
+|   arga ‑ integer, count of passed arguments (excluding executable and script filename)
+|   argw ‑ string array, each element holds one argument, zero‑based indexing
+|
+| Note: arga and argw are constants; reassignment is forbidden.
+|
+| Example shell invocation:
+|   kr test.kr a b "c d"
+|   → arga = 3, argw = ["a", "b", "c d"], fname() = "test.kr"
+|
+| Can combine with --opt:
+|   kr test.kr --opt "{haupt: main}" arg1 arg2
+|   main will be invoked, arga / argw still receive arg1 and arg2.
+|
+| Sample usage
+|   fkt main() {
+|       zeig "Script name: ", argw[0]
+|       fa arga > 0 {
+|           zeig "First argument: ", argw[1]
+|       }
+|       für i in 0..arga‑1 {
+|           zeig "argw[", i, "] = ", argw[i]
+|       }
+|   }
+|/
+// ============================================================================
+// Variable Declarations (mutable variables, constants, lazy variables)
+// ============================================================================
+der x = 10                      // Mutable variable
+der zl: zahl = 10               // Type annotation
+der var                         // Declare variable initialized to null
+der var: gzl                    // Variable typed as integer (zahl and gzl are semantically equivalent)
+gzl var                         // Prefix‑style declaration; does NOT support destructuring or multi‑assignment
+das π = 3.14159                 // Constant value
+faul lazy = 2 + 3               // Lazy variable: evaluate expression only on first access
+des m = x                       // Alias reference
+der obj = { "link": 5, "right": 7 }
+der link, recht = obj           // Object destructuring; equivalent to der link = obj.link, recht = obj.recht
+der a = 1, b = 2                // Multiple assignment in one statement
+der arr = [ 1, 2, 3, 4 ]
+a <-> b                         // Swap values of two variables
+global g = 1                    // Global scope; top‑level code is implicitly global
+global a <-> b
+global {                        // Global scope block (indent syntax allowed)
+    der a = 1, b = 2
+    fa 1 < 0 {
+        a = 2; b = 3
+    }
+}
+nutz x, zl                      // Mark identifiers as intentionally used; suppress unused‑symbol warnings
+nutz _                          // Mark all preceding symbols as used; common for library modules
+/| 
+| Kr supports implicit variable declaration via assignment without der/das/global.
+| Implicitly‑declared variables are mutable. In ambiguous cases use explicit declaration keywords.
+| Without global modifier scope is limited to current block / function body.
+| To define constants you must use das keyword.
+|/
+x = 20                          // Assignment (ist is an alias operator for assignment)
+x ist 30
+x += 5                          // Compound assignment operators
+x -= 2
+x *= 3
+x /= 2
+x %= 4
+x ^= 2                          // Exponentiation assign
+x |= 1
+x &= 2
+x ~= 2                          // Bitwise‑XOR assign
+s = "Hello"; h = "World"
+str = "  Hello World!  "
+// ============================================================================
+// Built‑in Data Types
+// ============================================================================
+ganzzahl = 42                   // Integer literal
+fliesskzl = 3.14                // Floating‑point literal
+Xz = 0x1.1p2                    // Hexadecimal (supports float and exponent notation)
+Oz = 0o1                        // Octal literal
+Bz = 0b1                        // Binary literal
+Text = "Hello"                  // Standard double‑quote string
+u_Text = u"\nabc{}\t"           // Raw string: no escape processing, no interpolation; single‑quote / backtick also work
+b_Text = b"\x19\x11"            // Binary string → byte‑value integer array [0x19, 0x11]
+e_Text = e"Delete"              // ANSI escape‑sequence enabled string
+Einz = 'e'                      // Single character literal; evaluates as byte‑value 0‑255; multi‑char becomes ordinary string
+leererText = ""
+leererEinz = ''                 // Empty single‑quote literal evaluates to character‑code zero
+Backtick = `\` \\`              // Backtick string: only back‑tick, backslash and & can be escaped; supports interpolation
+array = [1, 2, 3]               // Array literal
+leeresArray = []
+objekt = { "name": "Max", "alter": 30, "beruf": "Engineer" }  // Object literal; keys can be identifiers or quoted strings
+leeresObjekt = {}
+nichts = null                   // Null / none value
+// ============================================================================
+// Expressions & Operators
+// ============================================================================
+// Ternary conditional
+val = (x > 10) ? 100 : 200
+// Logical operators (UND / OD / NICH aliases for and / or / not; && || ! also allowed)
+fa a > 0 und b < 20 { }         // Logical AND
+fa a > 0 od b < 20 { }          // Logical OR
+fa nich (a > 0) { }             // Logical NOT
+// Infix operators
+1 > 0                           // Greater‑than
+1 < 2                           // Less‑than
+1 == 1                          // Equality comparison
+1 + 1                           // Addition
+1 - 1                           // Subtraction
+1 * 1                           // Multiplication
+1 / 1                           // Division
+1.0 / 1                         // Floating‑point division; max precision 1024‑bit mantissa
+1 + 1 * 2                       // Standard precedence multiplication before addition
+2 * (1 + 1)                     // Parentheses change evaluation order
+10 % 3                          // Modulo / remainder
+1 ^ 2                           // Exponentiation (right‑associative; higher precedence than unary minus: use (-2)^2 for negative‑base power)
+1 | 2                           // Bitwise OR
+1 & 2                           // Bitwise AND
+1 << 2                          // Bitwise left shift
+1 >> 2                          // Bitwise arithmetic right shift
+1 ~ 2                           // Bitwise negate
+1 ~~ 2                          // Bitwise XOR
+1!                              // Factorial
+1!!                             // Double factorial
+1°                              // Degree literal; value = x * π / 180
+1 + -1                          // Unary minus negative number
+1 <=> 1                         // Three‑way comparison (‑1 / 0 / 1)
+1.2e+3                          // Scientific notation float
+// Pipe |> operator: pass left‑hand value as first argument to right‑hand function call
+cleaned = "  Hello World!  " |> trim() |> ers(/World/, "Earth")
+// Equivalent to ers(trim("  Hello World!  "), /World/, "Earth")
+// Null‑coalescing ?? operator
+maybe = null
+result = maybe?.prop ?? "default"   // If maybe is null or property missing return fallback value
+// Optional‑chain ?. safe property access
+addr = { "address": { "city": "Berlin" } }
+// zeig addr?.address?.city ?? "unknown"
+// ============================================================================
+// Control‑Flow Statements
+// ============================================================================
+fa x > 15 || (x < 15 && x != 20) || x == 1 {
+    // Execute when condition evaluates true
+} snfa x == 15 {
+    // else‑if branch
+} sonst {
+    // else fallback branch
+}
+fa x in 1, 2 { }                // Equivalent to x == 1 || x == 2
+/|
+// Valid but discouraged syntax variants
+fa x in 1 dann null             // dann keyword starts statement block; rarely useful
+fa x in 1 null                  // Implicit block start also works
+fkt TestFunk() dann             // dann mandatory here to disambiguate indentation vs expression‑return
+    {"x": 1}                    // Object literal return; better to write gib {"x":1} explicitly
+|/
+indes x > 0 {
+    x -= 1
+}
+// Do‑while‑style loop: execute body at least once until user inputs "yes"
+/|
+tu {
+    zeig "Continue? (yes/no): "
+    lies antwort
+} indes antwort != "yes"
+|/
+// Classic C‑style for‑loop
+für i = 0; i < 5; i++ {
+    fa i == 2 { weiter }        // continue: skip remaining body, next iteration
+    fa i == 3 { bruch }         // break: exit loop entirely
+}
+// Range iteration using .. range syntax with optional step sch
+für i in 0..10 sch 2 {
+    // i iterates: 0,2,4,6,8,10
+}
+// Iterate over array elements
+zahlen = [100, 200, 300]
+für w in zahlen {
+    // w successively receives each array element
+}
+// Iterate object key‑value pairs
+obj = { "x": 10, "y": 20 }
+für k, w in obj {
+    // k = property key string; w = corresponding property value
+}
+// Multi‑level nested loop break / continue with depth argument
+für i in 1..5
+    für j in 1..4
+        fa j == 2 weiter 2      // continue two nesting levels outward
+        fa j == 3 bruch 2       // break out two nesting levels outward
+// ============================================================================
+// Function Definitions: ordinary, memoized, async
+// ============================================================================
+// Ordinary function definition
+fkt addiere(a = 1, b) {         // Parameters support default values
+    a + b                       // Implicit return of last evaluated expression; use leer modifier if no return intended
+    gib                         // Bare gib returns null; semicolon or closing brace required after bare gib
+}
+// Indent‑block style (stable, keep consistent formatting project‑wide)
+fkt einzug()
+    für i in 0..2
+        gib 3
+    ver
+        fa x == 1
+            null                // No‑op placeholder like pass in other languages
+        snfa x > 0
+            gib 2
+        sonst
+            dem 0
+    den fehl
+        zeig fehl
+fkt gibeinzug()
+    fa 1
+        gib                     // Bare early return; next line empty so semicolon not required
+    // x + 1                    // Not treated as return; indent level too shallow → implicit null return
+    gib(
+        x + 1                   // Parenthesized expression ignores indentation level
+    )
+// Variadic‑argument functions using &args or ...args
+fkt printf(result, &args) {
+    out = result
+    fa args == null {
+        zeig out
+        gib ""
+    }
+    für i in 0..args.län‑1 {
+        elem = args[i]
+        fa elem == null {
+            str = "null"
+        } sonst {
+            str = elem.alt(".0k")
+        }
+        out = out.ers("%d", str)
+    }
+    zeig out
+}
+// Custom namespace / scope‑container umf
+umf "B" {
+    xx = 10
+}
+umf "A" von "B" {
+    // zeig xx                  // Visible, inherited from parent scope B
+    yy = xx + 5
+}
+// zeig umf("A").yy             // Evaluates to 15
+// Destructure import from namespace
+{ xx, yy } = umf("A")
+// zeig xx + yy                 // → 25
+// Named‑namespace dot‑access syntax
+umf Namensraum {
+fkt fn() {}
+r = 1
+}
+Namensraum.fn()                 // Call via namespace prefix
+umf Namensraum                  // Bring namespace members directly into local scope
+fn()                            // Invoke without prefix
+// Escaping outer‑scope inside function
+fkt fak(n) {
+    fa n <= 1 {
+        gib 1                   // Explicit return statement
+    }
+    gib n * fak(n - 1)          // Recursive function call
+}
+fak(fkt test() { 1 + 1 }())     // Inline named‑function immediate invocation
+// Static function modifier (limited practical utility)
+stati fkt statisch() { }
+// Statement‑style function (library‑oriented syntax)
+satz fkt satzfkt(a, b) { }
+satzfkt 1, 2                    // Invoke as bare statement without parentheses
+// Memoized function with # prefix
+#fkt fib(n) {
+    als n {
+        0 => { gib 0 }
+        1 => { gib 1 }
+        _ => { gib fib(n‑1) + fib(n‑2) }
+    }
+}
+// zeig fib(10)                 // → 55
+// Async function marked ac prefix
+ac fkt langeBerechnung(x: zahl) {
+    gib x * 2
+}
+future = langeBerechnung(21)    // Async call returns Future handle object
+// result = warte future        // Block and await completion, unwrap result
+ac fkt fetchData(url) {
+    gib { "data": "Result", "status": 50 }
+}
+futureData = fetchData("api")
+// data = warte futureData
+// zeig data?.data ?? "Error"
+// Echo‑style kernel function; avoid heavy thread contention; prefer plain async functions
+kernregel sqrt2(__zweck) {
+    x = 1.0
+    iterations = 0
+    max_iter = 20
+    fa __zweck == "compare" {
+        max_iter = 5
+    }
+    indes iterations < max_iter {
+        x = (x + 2 / x) / 2
+        iterations = iterations + 1
+    }
+    gib x
+}
+/|
+handle = sqrt2("compare")        // First invocation mode compare sets max_iter=5
+zeig handle.wert()
+sleep(100)                       // Subsequent invocation reverts to default mode store max_iter=20
+zeig handle.wert()
+|/
+// Global‑scope function even when nested inside other blocks: ** prefix
+**fkt globalfkt() {
+    g = 2                        // Implicit mutable global assignment
+}
+// Isolated anonymous block scope
+{ }
+// Anonymous lambda function
+verdopple = fkt(x) { x * 2 }
+// zeig verdopple(7)
+// Closure example
+fkt macheZaehler() {
+    z = 0
+    fkt ink_() {
+        z = z + 1
+        gib z
+    }
+    gib ink_
+}
+z1 = macheZaehler()
+// zeig z1()                     // → 1
+// zeig z1()                     // → 2
+// Spread‑argument function call expansion
+f = fkt(a, b, c) { /| zeig(a + b + c) |/ }
+args = [1, 2, 3]
+f(...args)                       // Outputs sum 6
+// AST compile‑time macro definition
+makro Makro() {
+    // Macro body can contain arbitrary Kernregel statements / expressions
+}
+// ============================================================================
+// Type Aliases & Type Annotations
+// ============================================================================
+/|
+zahl    // union integer / floating‑point numeric type
+lang    // legacy big‑int compatibility alias; Kernregel supports arbitrary‑precision int natively
+gzl     // integer type
+kzl     // floating‑point number
+zkt     // string
+einz    // single character byte
+bool    // boolean true / false
+leer    // wildcard any‑type
+|/
+art Person = { name: zkt, alter: zahl, adresse: { strasse: zkt, nr: zahl } }  // Object shape type‑alias; keys must be identifiers
+art IntListe = zahl
+art Punkt = { x: zahl, y: zahl }
+art Farbe = "red" | "green" | "blue" // String literal union type alias
+pers: Person = { "name": "Anna", "alter": 25, "adresse": { "strasse": "Main‑st.", "nr": 10 } }
+// Struct / algebraic‑union variant type
+art Value {
+    x: gzl
+    y: gzl
+    => {                            // Union variant set
+        IntVal(gzl)                 // Variant with type parameter
+        FloatVal(kzl)
+        NumVal(zahl)
+        Point { x: gzl, y: gzl }
+    }
+}
+struktur: Value = Point(1, 2)       // Construct variant instance
+// Indent‑form type‑alias
+art Value
+    x: gzl
+    y: gzl
+    =>
+        IntVal(gzl)
+        FloatVal(kzl)
+        NumVal(zahl)
+        Point { x: gzl, y: gzl }
+// Raw‑pointer & smart‑pointer utilities
+/|
+| Pointer type syntax: zgr<T> raw pointer; schlau<T> automatic‑lifetime smart pointer
+| Built‑in pointer functions (usable as method calls):
+|   zgr(value)           allocate copy of value on heap; return raw pointer
+|   schlau(value)        allocate copy on heap; smart pointer auto‑deallocates
+|   zgrw(ptr)            dereference read pointer
+|   zgrs(ptr, value)     dereference write to pointer target
+|   frei(ptr)            manually free raw pointer memory; smart pointers do not require frei
+|   zgrNull(ptr)         test whether pointer is null‑pointer
+|   ptr.typ()            returns string "zgr" or "schlau"
+|/
+x = 42
+p = zgr(x)                  // Raw pointer points to heap‑allocated copy of x
+sp = schlau(x)              // Smart pointer copy
+// zeig zgrw(p)             // 42
+zgrs(p, 100)
+// zeig zgrw(p)             // 100
+// zeig x                   // Original x unchanged (pointer holds copy)
+frei(p)                     // Release raw pointer heap memory
+// Pointers with struct‑type values
+art TestArt {               // Define struct shape
+    x: gzl
+    y: gzl
+}
+pt: TestArt = { "x": 3, "y": 4 }
+ptr = zgr(pt)               // Raw pointer to heap copy of pt
+// zeig zgrw(ptr).x         // 3
+zgrs(ptr, { "x": 5, "y": 6 }) // Overwrite heap struct value
+// zeig zgrw(ptr).x         // 5
+// zeig pt.x                // Original stack pt remains untouched
+frei(ptr)
+// Function parameter & return‑value type annotations
+fkt begruesse(name: zkt, alter: zahl): [zkt]? {
+    "Hello {name}, you are {alter} years old."
+}
+// Alternative syntax: return‑type prefix before function name
+IntListe gibzahl() { gib 0 }
+bool boolWert() { gib wahr }
+leer beliebig() { }
+// OOP class definitions; cannot define classes inside function bodies
+// öffent public; privat private; schutz protected access modifiers
+klass Tier {
+    // Public instance fields
+    öffent name: zkt = "unknown"
+    privat alter: gzl = 0
+    // Protected block scope
+    schutz {
+        schutzVar = null
+    }
+    // Static class‑level properties
+    stati zaehler: gzl = 0
+    stati das x = 1
+    // Constructor (public by default)
+    konstr(name, alter) {
+        dies.name = name        // Instance members must be accessed via dies. self reference
+        dies.alter = alter
+        zaehler++               // Static members accessible directly within class body
+    }
+    // Public instance method
+    fkt sprich() {
+        // zeig dies.name + " makes a sound."
+    }
+    // Omit fkt keyword inside class for method definitions
+    zeigAlter() {
+        // zeig dies.name + " is " + dies.alter.alt() + " years old."
+    }
+    // Static class method
+    stati fkt getZaehler(): gzl {
+        gib zaehler
+    }
+}
+öffent klass öffentlich { }     // Access‑modifier prefix for class
+stati klass statiklass { }      // Static‑class marker
+// Indent‑style inheritance syntax
+klass Hund(Tier)                // Inherit from parent class Tier
+    privat rasse: zkt = "Mixed‑breed"
+    schutz
+        var = ""
+    konstr(name, alter, rasse)
+        ober(name, alter)       // Call parent‑class constructor; must be first statement inside constructor
+        dies.rasse = rasse
+    sprich()            // Override parent‑class instance method
+        // zeig dies.name + " barks!"
+    zeigRasse()
+        // zeig "Breed: " + dies.rasse
+    privat intern()
+        // zeig "internal helper method"
+// Instantiate objects and invoke methods
+tier = Tier("Generic", 5)
+tier.sprich()
+bello = Hund("Bello", 3, "German Shepherd")
+bello.sprich()
+bello.zeigRasse()
+// Access static properties / static methods
+Tier.getZaehler()
+Tier.zaehler = 0
+// Class with typed instance attributes and method return annotation
+klass Punkt {
+    x: gzl, y: gzl              // Instance fields inside class implicitly mutable; omit der
+    konstr(x: gzl, y: gzl) {
+        dies.x = x; dies.y = y
+    }
+    fkt abstand(): kzl {
+        gib sqrt(dies.x^2 + dies.y^2)
+    }
+}
+p = Punkt(3, 4)
+// zeig p.abstand()             // 5
+// Recommended mixed‑style class layout example
+klass Testklass {
+privat
+    stati x = 1
+öffent
+    stati fn(a)
+        a + x
+    stati leer fn(a)
+        als a
+            1 => gib 1
+}
+// ============================================================================
+// String Methods & Operations
+// ============================================================================
+s2 = "  Hello World!  "
+s2.län()                        // byte length (rarely used)
+s2.län                          // character count length property
+s2.ala()                        // Convert to array
+s2.trim()                       // strip leading / trailing whitespace
+s2.hat("World")                 // test if substring exists inside string → 1 / 0
+s2.beg(" Hello")                // check string prefix match
+s2.wo("World")                  // return zero‑based index of first substring occurrence; ‑1 if absent
+s2.letzt("l")                   // last‑occurrence index of substring
+s2.ab(2, 6)                     // slice half‑open interval [start,end)
+s2[2:6]                         // slice operator equivalent to ab()
+s2 = "1.5"
+s2.groß()                       // convert to uppercase (supports German umlauts ÄÖÜ)
+s2.klein()                      // convert to lowercase (Ä→ä etc.)
+s2.umk()                        // reverse string UTF‑8 character order
+s2.zähle("aa")                  // count non‑overlapping occurrences of substring
+s2.ohneAnfang("Hello")          // remove prefix if matches, else return unchanged string
+s2.ohneEnde("World")            // remove suffix if matches
+s2.füll(5, "r", "-")            // pad string to target width; direction l/r/c left‑align / right‑align / center
+s2.endetMit("!")                // test suffix match return 1 or 0
+s2.wieder(3)                    // repeat string n times
+s2.zeich(2)                     // get single UTF‑8 character at index
+s2.istZiffer()                  // all‑digits test; empty string yields 0
+s2.istBuchstabe()               // all alphabetic‑character predicate
+s2.istAlnum()                   // letters + digits only predicate
+s2.istRaum()                    // all whitespace characters predicate
+s2.istGroß()                    // all‑uppercase‑letters predicate; digits/symbols ignored
+s2.istKlein()                   // all‑lowercase‑letters predicate
+s2.istZahl()                    // numeric‑string test allows leading +/- sign
+s2.entferne("l")                // delete every occurrence of substring; produce new string
+s2.anfang(3)                    // take first N UTF‑8 characters
+s2.rechts(3)                    // take last N UTF‑8 characters
+"1" ## "1"                      // string concatenation operator
+// Regex match pass()
+line = "Name: Max"
+match = line.pass(/^([^:]+):(.*)&/)    // Regex uses & instead of $ for end‑of‑input anchor; Unicode supported
+fa match != null {
+    // zeig match[1]   → "Name"
+    // zeig match[2]   → " Max"
+}
+// Regex replace ers()
+text2 = "speed 100 rpm"
+text2.ers(/\s*\d+\s*rpm/, "km/h")
+// Regex split teil()
+csv = "a,b;c,，d"
+csv.teil(/[,，、;]/)                   // → ["a","b","c","d"]
+// Regex extract matches entfal()
+// zeig "abc123def456".entfal(/\d+/)   // → ["123", "456"]
+// Regex generate character‑set list regGen()
+regGen(/[\\x20‑\\x7E]/, /\s/, 32, 126) // produce list of printable ASCII characters excluding space
+regGen("[0‑9]", "57")                  // → ["0","1","2","3","4","6","8","9"]
+// String interpolation syntax reference
+// ────────────────────────────────────────────────────────────────
+// Syntax rules:
+//       {expr}                      evaluate expression and embed string representation
+//       {expr:formatSpec}           invoke alt(formatSpec) on value
+//       {expr:<width} / {expr:>width} / {expr:^width} alignment specifiers
+//       {expr:fillChar<width}       custom padding character before alignment marker
+//
+// Alignment markers:
+//   <    left‑align, pad right
+//   >    right‑align, pad left
+//   ^    center both‑side padding
+//
+// Backtick‑quoted strings use &{...} interpolation marker instead of {...}
+// ────────────────────────────────────────────────────────────────
+name2 = "World"
+n = 42
+s2 = "  Hello World!  "
+// Basic interpolation examples
+// zeig "Hello {name2}!"               → "Hello World!"
+// zeig "2 + 2 = {2 + 2}"              → "2 + 2 = 4"
+// zeig s2[2]                          // index string character access
+// alt number formatting
+// zeig "{n:.2k}"                      → "42.00" floating‑point two decimal places
+// zeig "{n:16}"                       → "2A" hexadecimal output
+// zeig "{n:04X}"                      → "002A" zero‑padded uppercase hex
+// Alignment padding examples
+// zeig "|{n:<8}|"                     → "|42      |" left‑align
+// zeig "|{n:>8}|"                     → "|      42|" right‑align
+// zeig "|{n:^8}|"                     → "|   42   |" centered
+// zeig "|{n:*<8}|"                    → "|42******|" custom fill‑char asterisk
+// zeig "|{n:‑^8}|"                    → "|---42---|" dash fill center
+// zeig "|{n:0>4}|"                    → "|0042|" zero‑pad right‑align
+// Combine format conversion + alignment
+// zeig "|{n:16>8}|"                   → "|      2A|" hex then right‑pad
+// zeig "|{n:.2k>10}|"                 → "|     42.00|" two decimal float then right‑pad
+// Explicit method call for disambiguation when fill‑char would conflict with format spec
+// zeig "|{n.füll(8, "l", "2")}|"      → "|22222242|"
+// ANSI color escape inside interpolated strings
+// zeig "{#FFFFFF} Text color. {#end}"      // reset with #end or #zurück
+// zeig `&{name2}`                     // backtick‑string interpolation
+// zeig `|&{n:<8}|`
+// ============================================================================
+// Object Dictionary Operations
+// ============================================================================
+person = { "name": "Max", "alter": 30, "beruf": "Engineer" }
+person.alter = 31                      // mutate existing object property
+person.stadt = "Berlin"                // add new property key‑value pair
+// zeig person.name
+person.adresse = { "strasse": "Main‑st.", "nr": 10 }
+// zeig person.adresse.strasse
+std = { "A": 2, "__stdwert": 1 }       // __stdwert defines fallback value for missing property access
+// Object spread‑copy ... operator
+person = { "name": "Alice", "age": 30 }
+newPerson = { ...person, "age": 31 }    // overwrite age while copying other keys
+// Object comprehension syntax
+original = { "a": 10, "b": ‑5, "c": 7 }
+positive = { k: w für k, w in original fa w > 0 }   // filter object entries
+person["d"] = 1                         // bracket‑notation assignment
+{ d, ...person } = person               // destructuring assignment to delete key d
+person.alt()                            // serialize object to human‑readable string
+person.ala()                            // Convert to array
+person.anf("c", 3)                      // insert or assign key‑value
+person.lösch("c")                       // delete key from object
+person.län                              // count number of object properties
+person.schl()                           // return array of all key strings
+person.werts()                          // return array of property values
+person.eintr()                          // return array of {key,value} entry objects
+person.zufall()                         // pick random entry {key,value}
+person.zufWert()                        // pick random property value
+person.umk()                            // re‑order object keys in‑place reverse sequence
+person.vereinige({ "ort": "Bonn" })     // shallow merge two objects return new combined object
+person.kopiere()                        // shallow clone object
+// ============================================================================
+// Array Methods & Operations
+// ============================================================================
+arr = [5, 2, 9, 1]
+arr.alt()                               // convert array to string representation
+arr.anf(4)                              // append element to array tail
+arr.finde(9)                            // search element return match or null
+arr.idx(2)                              // find zero‑based index of element
+arr.lösch(2)                            // delete element by index; returns removed element value
+arr.beit("\n")                          // join array elements into single string with separator
+arr.sort()                              // in‑place sort numeric / lexicographic; accepts custom comparator function
+arr.unique()                            // deduplicate array preserving first‑seen order, return new array
+arr.teil(1, 3)                          // slice half‑open range [start,end); supports negative indices
+arr[1:2]                                // slice operator alias
+arr.hat(9)                              // membership test return 1 or 0
+arr.alle(2)                             // collect all indices matching value
+arr.max()                               // get maximum element numeric or lex order
+arr.min()                               // get minimum element
+arr.sum()                               // sum numeric array elements
+arr.zufall()                            // random entry {index,value}
+arr.zufWert()                           // pick random element value
+arr.umk()                               // reverse array in‑place
+arr.letzt(9)                            // last index of value; no‑arg returns last element
+arr.flach()                             // flatten nested array one level deep
+arr.flach(2)                            // flatten to specified recursion depth
+arr.nehmen(2)                           // take first N elements new array
+arr.fallen(2)                           // drop first N elements new array
+arr.erstes()                            // return first element; error for empty array
+arr.mittel()                            // arithmetic mean of numeric array
+arr.produkt()                           // product multiply all numeric elements
+arr.einfuegen(1, 99)                    // insert element at given index mutate array
+arr.vereinige([6, 7])                   // concatenate two arrays return new array
+arr.schnitt([1, 3, 5])                  // set intersection array
+arr.differenz([1, 3, 5])                // set difference keep elements present only in source array
+arr.entferne(5)                         // remove every occurrence matching value mutate array
+arr.mische()                            // shuffle array in‑place random permutation
+arr[0] = 10;                            // bracket index assignment
+arr[1] += 3;                            // compound assignment on array slot
+--arr[2];                               // prefix increment / decrement operators on array elements
+// Array spread operator ...
+arr = [1, 2, 3]
+arr2 = [...arr, 4, 5]                   // build new array copying source elements
+// Higher‑order functional array methods
+arr.map(fkt(x) { x * 2 })               // transform each element map
+arr.filter(fkt(x) { x % 2 == 0 })       // keep elements passing predicate filter
+arr.reduz(fkt(acc, x) { acc + x }, 0)   // fold‑left reduce / fold
+arr.jeden(fkt(x) { /| statements |/ })  // iterate side‑effect only returns null
+arr.manche(fkt(x) { x > 3 })            // exists test any element satisfies predicate
+arr.keiner(fkt(x) { x > 10 })           // none‑satisfies predicate test
+arr.zähl(fkt(x) { x % 2 == 0 })         // count elements matching predicate
+arr.grupp(fkt(x) { x % 2 })             // group elements by function‑return key → object {key:[items]}
+arr.partit(fkt(x) { x > 3 })            // partition array into [matches, non‑matches] two‑element array
+arr.erste(fkt(x) { x > 3 })             // return first element satisfying predicate else null
+arr.zip([10, 20, 30, 40])               // pair‑wise zip two arrays into [[a0,b0],[a1,b1],...]
+// Array comprehension syntax
+quadrate = [ i*i für i in 0..5 fa i % 2 == 0 ]   // filter‑map produce new array
+objWerte = [ w für w in { "a": 1, "b": 2 } ]     // iterate over object values inside comprehension
+// Range literal for iteration
+r = 1..5                                // generate array [1,2,3,4,5]
+r = 10..1 sch ‑2                        // explicit negative step value
+r = 1..‑5                               // auto‑infer direction step
+// ============================================================================
+// Numeric Value Methods
+// ============================================================================
+num = 123
+num.alt()                               // convert number to decimal string
+num.alt(16)                             // convert number to hexadecimal string
+// alt format spec supports width, thousands‑separators, precision, rounding‑modifiers ^ ceiling / _ floor
+num.alt("04X")                          // zero‑padded uppercase hexadecimal
+str = "456.00"
+str.alz("k")                            // parse string into floating‑point number; "z" parse integer
+3.14159.runden(2)                       // round floating‑point value to N decimal places
+// ============================================================================
+// Generic Value Utility Methods
+// ============================================================================
+NULL = null
+Leer = []
+NULL.leer()                             // truthy for null / empty container
+Leer.leer()
+NULL.keine()                            // strictly null check
+Leer.keine()
+arr = [1, 2, 3]
+arr.leeren()                            // clear array contents mutate in‑place to empty []
+// ============================================================================
+// Numerical Calculus & Numerical Analysis Built‑ins
+// ============================================================================
+fkt quadrat(x) { gib x ^ 2 }            // f(x)=x² test function
+fkt summe(x, y) { gib x + y }
+fkt sinx(x) { gib sin(x) }
+fkt f_ode(x, y) { gib ‑y }              // ODE test function y' = ‑y
+// Numerical differentiation
+abl(quadrat, 2)                         // first‑order derivative auto‑step ~1e‑5
+abl(quadrat, 2, 0.0001)                 // custom finite‑difference step size
+ab2(quadrat, 3)                         // second‑order central‑difference derivative
+ab3(quadrat, 2)                         // third‑order derivative four‑point scheme
+ab4(quadrat, 2)                         // fourth‑order derivative five‑point formula
+pabl(summe, [1, 2], 0)                  // partial derivative w.r.t argument index‑0
+pabl(summe, [1, 2], 1)                  // partial derivative w.r.t argument index‑1
+// Numerical integration
+inte(quadrat, 0, 1)                     // trapezoidal integration default 100 segments
+inte(quadrat, 0, 1, 1000)               // specify number of integration segments
+simp(quadrat, 0, 1, 10)                 // Simpson integration even‑segment count
+gauss(quadrat, 0, 1, 8)                 // Gauss‑Legendre quadrature supported node‑counts 2,4,8
+// Root‑finding solvers
+nullst(sinx, 3, 4)                      // bisection method root search over interval
+nullst(sinx, 3, 4, 1e‑8)                // custom convergence tolerance
+newton(sinx, 3)                         // Newton‑Raphson solver starting guess
+newton(sinx, 3, 1e‑8, 50)               // tolerance and max‑iteration‑count parameters
+// Ordinary differential equation solvers
+euler(f_ode, 0, 1, 0.1, 10)             // Euler ODE solver y(0)=1 step‑size 0.1 ten steps
+rk(f_ode, 0, 1, 0.1, 10)                // Classic Runge‑Kutta RK‑4 higher‑accuracy ODE solver
+// Multivariate numerical optimization
+grad(summe, 1, 2)                       // compute numeric gradient vector
+grad(summe, 1, 2, 1e‑5)                 // custom derivative step for gradient
+gradab(summe, [1, 2], 0.1, 100)         // gradient‑descent optimization return history array
+// Polynomial least‑squares curve‑fitting
+datenpunkte = [
+    { "x": 0, "y": 1 },
+    { "x": 1, "y": 2.1 },
+    { "x": 2, "y": 3.8 },
+    { "x": 3, "y": 4.9 }
+]
+kquad(datenpunkte, 1)                   // fit degree‑1 linear polynomial return coefficients array [c0,c1]
+kquad(datenpunkte, 2)                   // fit quadratic degree‑2 polynomial coefficients [c0,c1,c2]
+// Anonymous inline function examples as calculus argument
+erg = abl(fkt(x) { x * x }, 3)
+// ============================================================================
+// Math Library Built‑in Functions
+// ============================================================================
+wurz(25)                        // square‑root function alias sqrt()
+sqrt(25)
+kub(10)                         // cube‑root alias cbrt()
+cbrt(10)
+btr(‑10)                        // absolute‑value alias abs()
+abs(‑10)
+sin(0)                          // trigonometric functions work in radians
+cos(0)
+tg(1.0)                         // tangent alias tan()
+tan(1.0)
+lg(100)                         // base‑10 logarithm alias log()
+log(100)
+ln(2.718)                       // natural logarithm base‑e
+ld(8)                           // base‑2 logarithm
+ctg(1.0)                        // cotangent alias cot()
+cot(1.0)
+sec(1.0)                        // secant
+csc(1.0)                        // cosecant
+asin(0.5)                       // inverse trig return radians
+acos(0.5)
+atan(1.0)
+atan2(1.0, 1.0)                 // two‑argument arctangent(y,x)
+sinh(0.0)                       // hyperbolic functions
+cosh(0.0)
+tanh(0.0)
+asinh(0.0)
+acosh(2.0)
+atanh(0.5)
+zuf()                           // random‑integer generator alias rand()
+rand()
+setze(42)                       // set random‑seed alias srand()
+srand(42)
+// Time & timing utilities
+zeit()                          // Unix epoch timestamp seconds
+zeit_us()                       // microsecond timestamp
+zeit_ms()                       // millisecond timestamp
+zeit_ns()                       // nanosecond timestamp
+datum()                         // formatted datetime string "YYYY‑MM‑DD HH:MM:SS"
+tick()                          // start high‑resolution stop‑watch
+tock()                          // return elapsed microseconds since tick()
+tock_ms()                       // elapsed milliseconds
+tock_s()                        // elapsed seconds
+format("Pi = %.2k", 3.14159)    // format string function similar to printf
+bytes("")                        // convert string to byte‑integer array
+umbytes([])                      // convert byte‑integer array back to string
+BC([])                           // execute raw CPU machine‑code byte‑sequence array; return result value
+/|
+// Console output / input functions
+schr "Hello World!"              // print without appending newline
+zeig "Hello World!"              // print with newline
+zeig `"zkt"`                    // backtick‑quoted raw literal string
+zeig 42, 1                      // multiple‑argument print comma‑separated values
+zeig "\n newline;\t tab;\r carriage‑return;\b backspace;"
+zeigIn(stderg, "Result: ", 42)  // write to stdout stream
+zeigIn(stdfehl, "Error: Division by zero") // write text to stderr error stream
+schrIn()
+loesch()                        // erase stored output lines from current scope
+zeigAlle()                      // dump stored output lines; optional flags for redraw / show‑line‑numbers
+aktu("Hello World!", 1, "v")     // in‑place overwrite console line id; hide/show cursor flags
+zeig "X" bei 10                 // assign output‑line numeric id for later aktual overwrite
+lies e mit(/([A‑Z]+)/, "z")                                 // read console input; regex filter; numeric‑parse flag
+lies text mit(
+    bis(                                                    // multi‑line input mode; stop‑keyword tokens
+        _ in "END", "STOP"
+    ),
+    (
+        input == "int" ? "/[0‑9]+(?:\\.[0‑9]+)?/" :
+        (input == "zkt" ? "/[a‑zA‑Z]+/" : "/[0‑9.]+/")
+    ),
+    "v"
+)
+zeig "Input: ", text
+sleep(5)                        // suspend execution N milliseconds
+|/
+// ============================================================================
+// Exception‑Handling try‑catch‑finally (ver‑den‑die)
+// ============================================================================
+fkt divide(a, b) {
+    ver {                      // try‑block catch runtime exceptions (syntax errors cannot be caught)
+        fa b == 0 {
+            dem "Division by zero"   // manually throw exception message string
+        } sonst {
+            gib a / b
+        }
+    } den fehler {             // catch‑block bind caught‑error to variable fehler
+        // zeig "Error: " + fehler
+        gib ‑1
+    } die {                    // finally‑block always executes for cleanup logic
+    }
+}
+ver {
+    // dem 404                 // throw numeric exception value
+} den code {
+    // zeig "Error‑code: " + code.alt()
+}
+ver {
+    // dem 500
+} den _ { }                    // catch‑all wildcard ignore exception value
+// ============================================================================
+// Assertions & Runtime Type‑Introspection
+// ============================================================================
+x = 1
+sicher x > 0;
+sicher (x != null);            // assertion failure raises runtime exception
+fkt positiv(Zahl) { Zahl > 0 }
+fkt nichtLeer(Text) { Text != null && Text.län > 0 }
+fkt verarbeite(alter, name) {
+    sicher positiv(alter), "Age must be positive!"       // custom assertion‑failure message
+    sicher nichtLeer(name)
+}
+// Runtime type inspection methods
+num = 1
+num.typ()         // → "gzl"
+art def = fkt(gzl): gzl
+def IntFunc(x: gzl) { gib 1 }
+typist(42)        // → "gzl"
+typist(3.14)      // → "kzl"
+typist("hello")   // → "zkt"
+typist([1, 2])    // → "[gzl]"
+typist({"A": 1})  // → "{A: gzl}"
+typist(IntFunc)   // → "fkt(gzl): def"
+typist(null)      // → "null"
+// coarse‑grain category inspection gtyp()
+obj = {}
+arr = []
+obj.gtyp()        // → "objekt"
+arr.gtyp()        // → "array"
+IntFunc.gtyp()    // → "funktion"
+// ============================================================================
+// Enumerated Variants & Pattern‑Matching als
+// ============================================================================
+aufz Option {
+    Einige(wert),              // variant carrying payload value
+    Keine,                     // zero‑payload variant
+    VAL_GZL,
+    VAL_KOMMA,
+    VAL_ARRAY
+}
+opt = Einige(42)               // construct variant instance
+none = Keine
+// Pattern‑match expression als { ... => ... }
+als opt {
+    Einige(w) => {
+        // zeig "Value: " + w
+    }
+    Keine => {
+        // zeig "No value available"
+    }
+}
+Option wertfkt() { }
+// Literal‑value pattern‑match
+als 42 {
+    42 => { /| zeig "equals 42" |/ }
+    _  => { /| zeig "not equal to 42" |/ }             // wildcard match‑everything pattern
+}
+// Object‑destructuring pattern‑match
+als { "name": "arisu", "alter": 1 } {
+    { name, alter } => { /| zeig name + " is " + alter |/ }
+}
+// Multi‑pattern alternatives and guarded conditional patterns
+x = VAL_GZL
+als x {
+    VAL_GZL | VAL_KOMMA => "number"
+    VAL_ARRAY fa typist(x) == "array" => "array"
+    _ => "other"
+}
+// Indent‑style pattern‑match layout
+/|
+als x
+    "A" =>
+        zeig "Match A"
+        gib 1
+    "B" =>
+        zeig "Match B"
+        gib 2
+|/
+// ============================================================================
+// File‑System I/O
+// ============================================================================
+/|
+imp "math.kr" as m                              // import library with namespace alias
+imp "utils.kr"                                  // import symbols directly into local scope
+imp typs                                        // load built‑in lag library modules without file extension
+lese("input.txt")                               // read entire text‑file as string
+leseBin("img.png")                              // read binary file return byte‑array
+schrd("out.txt", "Hello")                   // write text or binary‑array data to disk file
+ausf("ffplay ‑nodisp ‑autoexit audio/1.ogg")    // spawn external subprocess synchronously
+ac_ausf()                                       // asynchronous subprocess call return future handle
+lauf("C:\test.exe", ["--h"])                    // Programm ausführen, Rückgabewert nahezu identisch mit ausf; Aufruf ohne Argumente, falls kein zweiter Parameter vorhanden
+f = ac_lauf("C:\test.exe", ["--h"]) // Asynchrones lauf
+aufgAnf(f.id)                                   // -> 1
+aufgT(f.id)                                     // Prozess beenden
+|/
+// ============================================================================
+// KDB Persistent Key‑Document Database
+// ============================================================================
+/|
+daten = ladeKD("test.kd")
+eintrag1 = {
+    id: 1001,
+    vater: 0,
+    typ: 1,                                     // type 1 text; 2 binary blob; 3 misc
+    worte: ["Staff", "Development"],
+    text: "Alice Schmidt",
+    daten: bytes("\x48\x65\x6C\x6C\x6F")
+}
+schrKD(daten, eintrag1)                         // insert new entry error on duplicate id
+erneuKD(daten, eintrag1)                        // update existing entry error if id missing
+für id in (sucheTyp(meineDaten, 5)) {
+    loesKD(meineDaten, id)
+}
+komprimKD(meineDaten)                           // compact database file reclaim unused disk space
+eintrag = daten.hole(1001)                      // fetch record object by numeric id
+zeig eintrag.text
+treffer = daten.sucheTag("Staff")               // search records matching tag label
+für id in treffer {
+    eintrag = daten.hole(id)
+    zeig eintrag.text
+}
+daten.sucheTyp(2)                               // fetch all entries of given numeric‑type code
+daten.kinder(1001)                              // fetch child‑records where vater = given id
+daten.suche("Project")                          // full‑text regex search within text field
+daten.alle()                                    // get list of every record id
+daten.zaehle()                                  // total record‑count
+menge = ladeKD("data.kd")
+verschlKD(menge, "myPassword")                // encrypt whole database file
+entschlKD(menge, "myPassword")                // decrypt database file
+|/
+// ============================================================================
+// JSON Serialization / Deserialization
+// ============================================================================
+/|
+obj = jsonzu(`{"name": "Kernregel", "version": 1.23, "features": ["JSON", "fast"]}`)
+data = { name: "Test", zahl: 42, aktiv: wahr }
+jsonStr = zujson(data)
+zeig jsonStr
+|/
+// ============================================================================
+// HTTP Network Client & Web‑Server
+// ============================================================================
+/|
+// Synchronous HTTP GET
+erg = ANFR("GET", "https://httpbin.org/get", {
+    kopf: { "User‑Agent": "Kernregel" },
+    zeitgre: 5
+})
+zeig erg.zustand
+zeig erg.kopf["Content‑Type"]
+zeig erg.inhalt
+// Synchronous HEAD request
+ANFR("HEAD", "https://example.com")
+// Synchronous POST
+antwort = ANFR("POST", "https://httpbin.org/post", {
+    daten: "{\"name\":\"test\"}",
+    kopf: { "Content‑Type": "application/json" }
+})
+zeig antwort.zustand
+// Synchronous PUT
+res = ANFR("PUT", "https://httpbin.org/put", {
+    daten: "updated content",
+    kopf: { "If‑Match": "etag123" }
+})
+// Synchronous DELETE
+status = ANFR("DELETE", "https://httpbin.org/delete")
+zeig status.zustand
+// Synchronous PATCH
+patch = ANFR("PATCH", "https://httpbin.org/patch", {
+    daten: "{\"status\":\"half\"}"
+})
+// Asynchronous HTTP request ac_ANFR return Future
+z = ac_ANFR("GET", "https://httpbin.org/get", { zeitgre: 10 })
+res = warte z
+zeig res.inhalt
+fut = ac_ANFR("POST", "https://httpbin.org/post", {
+    daten: "hello world",
+    kopf: { "Content‑Type": "text/plain" }
+})
+ergebnis = warte fut
+zeig ergebnis.zustand
+// Optional‑chain + null‑coalescing for network responses
+antwort2 = ANFR("GET", "https://example.com")
+zeig antwort2?.kopf["Content‑Type"] ?? "unknown"
+// Timeout‑guarded await with fallback value
+ergebnis = warte ac_ANFR("GET", "https://api.example.com") mit Zeit 3000 sonst "Network‑error"
+// Await multiple futures in parallel
+future1 = ac_ANFR("GET", "https://api1.com")
+future2 = ac_ANFR("GET", "https://api2.com")
+ergebnisse = warte [future1, future2]
+// Embedded HTTP server starteServer / ac_starteServer
+// Request‑object fields passed to handler function:
+//   anfrage.methode  ‑ HTTP‑method string "GET", "POST", "PUT" etc
+//   anfrage.pfad     ‑ full request‑path including query‑string
+//   anfrage.kopf     ‑ object of request‑header key‑value pairs
+//   anfrage.inhalt   ‑ raw unparsed request‑body string
+// Handler function must return response‑object:
+//   { zustand: httpStatusCode, kopf: { ...response‑headers... }, inhalt: responseBodyText }
+// Built‑in response‑helper constructors auto‑set Content‑Type header:
+//   html(text[, statusCode])        HTML response
+//   json(value[, statusCode])       JSON‑serialize object as response
+//   text(text[, statusCode])        plain‑text response
+//   umleiten(url[, statusCode])     HTTP redirect response default status 302
+// URL parsing helpers
+//   abfrage(urlString)              parse query‑string into key‑value object
+//   formular(postBody)              parse application/x‑www‑form‑encoded form data
+//   esc(htmlText)                   HTML entity‑escape & < > " '
+//   kodierURL(rawString)            URL percent‑encode string
+//   dekodierURL(encodedString)      decode percent‑encoded URL component
+// Server‑Sent‑Events SSE streaming API
+//   SSE()                           create SSE stream‑handle object
+//   sende(stream, data)             send plain SSE message
+//   sendeSSE(stream, eventName, data) send named custom‑event SSE message
+//   schliesse(stream)                terminate SSE stream connection
+// Note: SSE data‑producer logic must live inside ac fkt async function to avoid blocking server‑worker thread.
+// Network‑utility holeIP() retrieve host‑machine / client‑peer ip‑address information.
+// Web‑server minimal GET‑route example:
+fkt handler(anfrage) {
+    url    = anfrage.pfad
+    params = abfrage(url)
+    qm     = url.stelleVon("?")
+    pfad   = qm == ‑1 ? url : url.ab(0, qm)
+    fa pfad == "/" {
+        titel = params.titel ?? "World"
+        gib html(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="utf‑8">
+                <title>Kernregel</title>
+                <style>
+                    body { font‑family: sans‑serif; margin: 2em; }
+                    h1   { color: #2a6; }
+                    code { background: #eee; padding: 2px 4px; border‑radius: 3px; }
+                </style>
+            </head>
+            <body>
+                <h1>Hello &{esc(titel)}!</h1>
+                <p>Path: <code>&{esc(pfad)}</code></p>
+                <p>Search‑param: <code>&{esc(params.suche ?? "—")}</code></p>
+                <ul>
+                    <li><a href="/data?x=1&y=2">/data?x=1&y=2</a> (JSON)</li>
+                    <li><a href="/text?name=Max">/text?name=Max</a> (Plain‑text)</li>
+                    <li><a href="/old">/old</a> (Redirect → /)</li>
+                </ul>
+            </body>
+            </html>
+        `)
+    }
+    snfa pfad == "/data" {
+        gib json({
+            pfad: pfad,
+            parameter: params,
+            zeit: zeit(),
+            gefunden: wahr
+        })
+    }
+    snfa pfad == "/text" {
+        gib text("Hello " ## (params.name ?? "World") ## "!\n")
+    }
+    snfa pfad == "/old" {
+        gib umleiten("/", 302)
+    }
+    sonst {
+        gib html(`
+            <h1>404‑Not Found</h1>
+            <p>Requested‑path: <code>&{esc(url)}</code></p>
+        `, 404)
+    }
+}
+starteServer(8080, handler)
+// POST‑form‑handling web‑handler example
+fkt formHandler(anfrage) {
+    fa anfrage.pfad == "/login" und anfrage.methode == "GET" {
+        gib html(`
+            <form method="post" action="/login">
+                <p>Username: <input name="username"></p>
+                <p>Password: <input name="password" type="password"></p>
+                <button type="submit">Sign‑in</button>
+            </form>
+        `)
+    }
+    snfa anfrage.pfad == "/login" und anfrage.methode == "POST" {
+        daten  = formular(anfrage.inhalt)
+        nutzer = daten.username ?? ""
+        pass   = daten.password ?? ""
+        fa nutzer == "" od pass == "" {
+            gib text("Username and password required", 400)
+        }
+        fa nutzer == "admin" und pass == "secret" {
+            gib umleiten("/welcome?name=" ## kodierURL(nutzer), 303)
+        }
+        gib html("<p>Login‑failed</p>", 401)
+    }
+    snfa anfrage.pfad == "/welcome" {
+        name = abfrage(anfrage.pfad).name ?? "Guest"
+        gib html("<h1>Welcome, &{esc(name)}!</h1>")
+    }
+    sonst {
+        gib text("Method‑not‑supported", 405)
+    }
+}
+// SSE real‑time push demo
+fkt sseHandler(anfrage) {
+    fa anfrage.pfad == "/" {
+        gib html(`
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf‑8"><title>SSE Demo</title></head>
+            <body>
+                <h1>Server‑Log‑Stream</h1>
+                <div id="log"
+                     style="background:#111;color:#0f0;padding:1em;
+                            height:300px;overflow:auto;font‑family:monospace"></div>
+                <script>
+                    const es  = new EventSource("/stream");
+                    const log = document.getElementById("log");
+                    es.onmessage = e => {
+                        log.innerHTML += e.data + "<br>";
+                        log.scrollTop = log.scrollHeight;
+                    };
+                    es.addEventListener("done", () => {
+                        log.innerHTML += "<i>[Stream‑closed]</i><br>";
+                        es.close();
+                    });
+                </script>
+            </body>
+            </html>
+        `)
+    }
+    snfa anfrage.pfad == "/stream" {
+        s = SSE()
+        ac fkt producer(stream) {
+            für i in 1..10 {
+                sendeSSE(stream, "log‑event", "log‑" ## i ## " — " ## datum())
+                sleep(500)
+            }
+            sendeSSE(stream, "done", "complete")
+            schliesse(stream)
+        }
+        producer(s)
+        gib s
+    }
+    sonst {
+        gib html("<h1>404‑Not Found</h1>", 404)
+    }
+}
+|/
+// ============================================================================
+// Inline C++ Interop
+// ============================================================================
+/|
+cpp("
+#include <iostream>
+int main() \{
+    std::cout << \"Hello from C++!\";
+    return 42;
+}")
+// Pass Kernregel variables into C++ environment via json‑bind mode
+name = "World"
+zahlen = [1, 2, 3]
+c_erg = cpp(`
+#include <iostream>
+int main(int arga, char* argv[]) {
+    if (arga < 2) return 1;
+    auto input = JSON::parse_from_file(argv[1]);
+    
+    std::string name = KR::get(input, "name").as_string();
+    auto arr = KR::get(input, "zahlen").as_array();
+    
+    int sum = 0;
+    for (auto& v : arr) sum += v.as_int();
+    
+    JSON output;
+    output["greeting"] = "Hello " + name + "!";
+    output["sum_result"] = static_cast<long long>(sum);
+    KR::set(output, "new_var", 42);
+    KR::set(output, "name", "Modified‑Name");
+    
+    std::cout << output.serialize() << std::endl;
+    return 0;
+}
+`,
+{
+    "mode": "json",
+    "bind": { "name": name, "zahlen": zahlen },
+    "timeout": 5000
+})
+zeig name
+zeig c_erg.greeting
+zeig c_erg.sum_result
+|/
+// Inline assembly execution
+/|
+asm(``)
+|/
+// ============================================================================
+// Low‑level Invocation
+// ============================================================================
+/|
+// Pre‑processor stage macros
+#makro DEBUG 1                      // Define macro; supports parameters e.g. `#makro DEBUG(a, b)`; use `\` for line‑continuation
+#fa DEBUG                           // Conditional preprocessor branch
+    zeig "debug mode"
+#fan                                // Invert condition
+#snfa                               // Else‑if for preprocessor
+#sonst                              // Else branch
+#endfa                              // End conditional block
+#r DEBUG                            // Undefine macro
+#r "Func"                           // Remove lexikal alias definition
+// ---------- Auto‑registered system‑detection macros ----------
+| The Kr interpreter registers platform, architecture, compiler macros automatically on startup.
+| These are used inside `#fa` / `#fan` conditional compilation blocks.
+| You can overwrite with `#makro` or delete them via `#r`.
+| Outside preprocessor directives, they evaluate as boolean values e.g. x = WIN_32.
+|
+| Operating‑system:
+|   WIN_32          Equivalent to _WIN32 (32‑bit & 64‑bit Windows, MinGW / MSVC compatible)
+|   WIN_64          Only defined on 64‑bit Windows
+|   WINDOWS         Alias for WIN_32
+|   LINUX           Linux (also defined under Android‑Linux)
+|   MACOS           macOS (Darwin‑based)
+|   UNIX            Unix‑like platforms (Linux / macOS / BSD / Android)
+|   FREEBSD         FreeBSD OS
+|   OPENBSD         OpenBSD OS
+|   NETBSD          NetBSD OS
+|   ANDROID         Android NDK build (LINUX and UNIX are also defined)
+|
+| CPU Architecture:
+|   ARCH_X86_64     x86‑64 (_M_X64 / __x86_64__)
+|   ARCH_X86        32‑bit x86 (_M_IX86 / __i386__)
+|   ARCH_ARM64      ARM 64‑bit (_M_ARM64 / __aarch64__)
+|   ARCH_ARM        32‑bit ARM (_M_ARM / __arm__)
+|   ARCH_RISCV      RISC‑V
+|   ARCH_PPC64      PowerPC 64‑bit (__powerpc64__ / __ppc64__)
+|   ARCH_64         Any 64‑bit pointer architecture
+|   ARCH_32         Any 32‑bit pointer architecture
+|
+| Pointer bit‑width:
+|   BITS_32         32‑bit pointer size
+|   BITS_64         64‑bit pointer size
+|
+| Compiler identification:
+|   COMPILER_GCC    GNU GCC / G++
+|   COMPILER_CLANG  LLVM Clang
+|   COMPILER_MSVC   Microsoft Visual C++
+|
+| Interpreter constants:
+|   CPLUSPLUS       Defined when running under C++ compiler (__cplusplus)
+|   KR              Always defined for Kr interpreter
+|   KR_MAJOR        Major version number
+|   KR_MINOR        Minor version number
+|   KR_PATCH        Patch version number
+|
+|   DEBUG            Defined only in Debug mode
+|   stderg          0 (stdout stream id)
+|   srdfehl         1 (stderr stream id)
+// Platform‑dependent conditional code
+#fa WIN_32
+    zeig "Running on Windows"
+#snfa LINUX
+    zeig "Running on Linux"
+#snfa MACOS
+    zeig "Running on macOS"
+#sonst
+    zeig "Unknown system"
+#endfa
+// Pointer‑width check
+#fa BITS_64
+    zeig "64‑bit system"
+#sonst
+    zeig "32‑bit system"
+#endfa
+// Pre‑processor logic operators `#fa` / `#fan` support `!` `&&` `||`, parentheses and comparisons `!=` `<=` etc.
+#fa WIN_32 && BITS_64
+    zeig "64‑bit Windows"
+#endfa
+#fa (LINUX || MACOS) && !ANDROID
+    zeig "Desktop Unix‑like OS"
+#endfa
+// Negate full expression with #fan
+#fan ARCH_X86 || ARCH_X86_64
+    zeig "Non‑x86 architecture"
+#endfa
+// Combine compiler and platform filters
+#fa COMPILER_GCC && LINUX
+    zeig "GCC compiler on Linux"
+#endfa
+// Version‑gate conditional block
+#fa KR_MAJOR == 0 && KR_PATCH >= 1000
+    zeig "{KR_MAJOR}.{KR_MINOR}.{KR_PATCH}"
+#endfa
+// Overwrite / delete built‑in macros dynamically
+#makro WIN_32 1                     // Override system macro (has no practical effect but allowed syntax)
+#r WIN_32                           // Undefine; subsequent #fa WIN_32 evaluates false
+#makro WIN_32 1                     // Re‑define user‑custom macro
+#r WIN_32                           // Undefine again
+// Library‑file pattern together with `nutz`
+#fa KR && !DEBUG
+    // Optimized code‑path for release builds
+#endfa
+#makro ADD(a, b) (a + b)
+#makro GREET(name) "Hello " + name + "!"
+// Lexikal keyword alias definitions (for teaching; spaces are supported; multiple aliases for same token allowed).
+// Trailing # tag declares syntax‑highlight classification; works even for imported lexikal blocks.
+// Supported tags: # erkl, # fkt, # def, # ausf, # typ, # klas, # imp, # aufz, # als, # zahl, # text, # pass, # meth, # name, # var
+// Note: lexikal directly manipulates tokenizer rules and can produce surprising edge‑case behaviour. Prefer native keywords whenever you can.
+//
+// ---- Matching rules ----
+// Two kinds of key patterns for lexikal substitution:
+//
+// [Pure‑identifier keys] e.g. "let", "for"
+//      Only match outside strings, character literals, backtick‑strings.
+//      Both surrounding characters must be non‑identifier characters to avoid partial‑word replacement inside variable names.
+//
+// [Mixed‑content keys] containing symbols / spaces / quotes e.g. "###", "@@"
+//      Loose matching: applies even inside string / char / backtick literals.
+//      Does NOT match if immediately preceded by an unconsumed backslash `\` (escaped).
+//      Backslash itself can also be replaced; substitutions iterate repeatedly until no further changes occur.
+//      This enables rewriting symbols inside string content and even quote characters, but be careful to avoid unintended matches inside documentation comments.
+lexikal {
+    "let"               = "der"     # erkl
+    "for"               = "für"     # ausf
+    "if"                = "fa"      # ausf
+    "def"               = "fkt"     # def
+    "function"          = "fkt"     # def
+    "async function"    = "ac fkt"  # def
+    "class"             = "klass"   # typ
+    "global"            = "global"  # aufz
+}
+// Mixed‑key example 1: symbol substitution works inside and outside strings
+lexikal {
+    "###" = "zeig"  # ausf
+    "@@"  = "%%"    # text
+}
+### 1 + 1                       // expands → zeig 1 + 1
+zeig "Value: @@", 42             // inside string also matches → zeig "Value: %%", 42
+zeig "Value: \@@", 42            // escaped \@@ does NOT substitute → literal "Value: \@@"
+// Mixed‑key example 2: multi‑pass iteration with backslash replacement
+lexikal {
+    "\\\\" = "\\"               // two literal backslash characters become one backslash
+    "@@"   = "%%"
+}
+// Source text \\@@
+// Pass‑1: \\ matches "\\\\" → becomes single \; tokenizer then matches @@ → final output: \%%
+// Source text \@@
+// Pass‑1: leading \ is not matched by any rule, marks following @ as protected, no substitution happens → literal \@@
+ergebn = ADD(3, 5)                  // macro expands → (3 + 5)
+nachricht = GREET("Anna")           // macro expands → "Hello " + name + "!"
+tokens()                            // Return token info for current source‑line
+tokens([2, 4])                      // Tokens from line 2 to line 4 inclusive
+tokens([1, 3], [3, 7])              // Token rectangle region from (line,col) to (line,col)
+worte(5)                            // Get identifier‑word tokens on line 5 (exclude operators and punctuation)
+worte([2, 4])                       // Word tokens for line‑range 2‑4
+ast(1 + 1)                          // Print abstract syntax tree for given expression
+zeile()                             // Return current source‑line number as integer
+zeile("s")                          // Return current column number as integer
+zeile("a")                          // Return "line:column" string
+#zeile 1 "";                        // Preprocessor directive override tokenizer line‑number and filename; semicolon required to prevent parse ambiguity
+fname()                             // Get current executing script filename
+KRFehl("...", 1, 2, "kr", "a", "a") // Raise system‑level Kr error; optional line, column, filename, context, hint parameters. Single‑argument form reports error at caller stack‑frame.
+KRWarn("...", 1, 2, "kr")           // Emit Kr system warning with optional position metadata
+KRKom("test.kr", 0, "...")          // Invoke Kr interpreter parser; parameters filename, share‑scope flag (1/0), source‑code text
+// Object‑style KRFehl invocation example
+KRFehl({
+    "info": "Variable 'y' has not been declared in current scope",
+    "zel": 3,
+    "spl": 9,
+    "name": "main.kr",
+    "hint": "Initialize variable 'y' as integer value",
+    "rueck": 0,                     // stack‑frame roll‑back level for error reporting
+    "kont": `
+x = 1
+e = x + y
+zeig e`
+})
+// Output rendered in interpreter:
+----------------------
+Kernregel vX.X.XXXX
+----------------------
+--- Error (Near line 3) ---
+       1:
+       2: x = 1
+>>>    3: e = x + y
+                  ~
+       4: zeig e
+--- End context ---
+main.kr:3:9: Variable 'y' has not been declared in current scope
+ Hint: Initialize variable 'y' as integer value
+
+// Object‑style KRWarn (supports "rueck" stack‑rollback field same as KRFehl)
+KRWarn("Variable 'x' declared but never used", 1, 2, "main.kr")
+// Console warning output:
+[WARN] test.kr:1:2: Variable 'x' declared but never used
+
+// Terminate whole program execution
+ende(0)                             // Immediately exit process (alias exit()); accepts numeric exit‑code
+gib;                                // Bare gib at top‑level scope terminates program with no return‑code value
+|/
+// ============================================================================
+// Miscellaneous Built‑in Features
+// ============================================================================
+n = null ?? 42                      // null‑coalescing operator example → result 42
+// Hotkey binding / interactive key‑capture subsystem
+/|
+bind "1" { zeig "Option 1 selected" }
+bind "\x1b" { zeig "Esc pressed" }
+bind "Esc" { zeig "Esc pressed" }
+bind "Q", "q" { zeig "Quit program" }
+taste()                             // Blocking synchronous key read
+ac_taste("Esc")                     // Register async key‑event listener for specific key
+taste_g("Esc")                      // Spawn async listener and return handle
+ac_taste("Esc", "stop")             // Deregister existing async key‑listener for Esc key
+// Simple input loop example
+indes wahr {                        // wahr = boolean true constant; fals = boolean false
+    zeig "Press 1, 2 or Q:"
+    eingabe = taste()
+    drücke(eingabe)
+    fa eingabe == "Q" {
+        bruch
+    }
+}
+|/
+// ============================================================================
+// lag Standard Library Modules
+// ============================================================================
+/|
+1.  lexikal‑en / lexikal‑zh / lexikal‑ja — keyword remapping for different natural‑language conventions
+    Provides English, Chinese, Japanese keyword aliases. After importing lexikal‑zh you can write keywords like variable / constant / if / function instead of der / das / fa / fkt.
+    lexikal‑de provides full German‑language keyword variants. lexikal‑wen for classical‑Chinese‑style syntax.
+    Macro flag LEX_EN_SYM (define before import with #makro LEX_EN_SYM 1) enables symbol‑level remapping alongside identifier keywords.
+
+2.  text — string comparison utilities
+    Functions: verg lexicographic compare; nverg compare limited to first N characters; iverg case‑insensitive compare; findc locate substring index; abstandQm squared Euclidean character distance.
+    All functions safely handle null inputs; good for sorting and input‑validation logic.
+
+3.  math — mathematical constants and helper routines
+    High‑precision constants: pi / pi32 / pi64 / pi128 / pi256; e, τ (tau), φ (golden‑ratio), ln2, ln10, sqrt2, sqrt3, sqrt5.
+    combinatorics: binom binomial coefficient; perm permutation count.
+    number theory: gcd greatest‑common‑divisor; lcm least‑common‑multiple; isPrim primality test.
+    statistics: mean average; varianz variance; spbVarianz sample variance; stabw standard‑deviation; spbstabw sample standard‑deviation; logFak Stirling‑approximated log‑factorial.
+    Periodic‑table element data variables e.g. H = {nr:1, __stdwert:1.008, en:"Hydrogen", zh:"氢", de:"Wasserstoff", stable:wahr}.
+    Access via atomic number: elemente[1] returns H entry; alias elem points to same table.
+
+4.  c_meth — C / Java‑style emulation layer & C source translator
+    printf, fprintf, snprintf formatted output; Logger static‑class .out / .err / .info / .debug / .warn / .error.
+    Source‑code translation utilities: ausf_C isolated‑scope execute‑from‑file; ausf_C_teilen shared‑scope execute‑from‑file;
+    ausf_C_text isolated‑scope execute‑source‑string; ausf_C_teilen_text shared‑scope execute‑source‑string.
+
+5.  py_meth — Python / JavaScript‑style convenience wrappers
+    print / input / dict / sorted / sum / min / max / round helpers; console static‑class .log / .err; Enum emulation utilities.
+|/
+// ============================================================================
+// Verwirrt Sub‑Language (direct inline execution)
+// ============================================================================
+// Verwirrt has no reserved keywords; only symbols, numbers and identifiers.
+// Can freely call Kernregel variables and functions; certain advanced types are unsupported.
+// Unicode identifiers are allowed.
+// When used programmatically, invoke as vw(`...`)
+<--vw-->                        // Enter Verwirrt mode
+x = 1                           // assignment
+x = 1.1                         // float literal
+x ? 1 : 2                       // ternary conditional
+arr = []                        // array literal
+obj = {}                        // object literal
+// compound assignment operators
+x += 1
+x -= 1
+x *= 1
+x /= 1
+x %= 1
+x ^= 1
+// logical operators
+// |                            // logical OR
+// &                            // logical AND
+// !                            // logical NOT
+// comparison operators
+// >                            // greater‑than
+// <                            // less‑than
+// ==                           // equality
+?> x == 1 | x >= 2 >> x = x + 1 // if‑statement syntax: ?> condition >> body
+|> x < 1 >> x = x + 2           // else‑if
+!> x = 0                        // else branch
+// indent‑based while‑loop
+# x < 10 >>                     // while condition
+    x = x + 1
+// for‑each range‑loop
+## x # 1..10 >>                 // for‑loop over range
+    ^^                          // continue
+    ~~                          // break
+1 + 1                           // addition
+1 - 1                           // subtraction
+1 * 1                           // multiplication
+1 / 1                           // division
+2 * (1 + 1)                     // parenthesized expression
+1 % 1                           // modulo remainder
+1 ^ 1                           // exponentiation
+@ main(a, b):                   // function definition header
+    a + b
+    @^ 0                        // explicit return; implicit return value defaults to zero
+// \x\                          // print built‑in
+<---->                          // Exit Verwirrt sub‑language mode
+// ============================================================================
+// VSE Standard Architecture‑64 Assembly Interop (direct inline execution)
+// ============================================================================
+// Prefer passing string variables via &{...} interpolation. Variables cannot be directly injected into VA source text.
+// Executes real physical registers and native machine‑code under interpreter simulation.
+// Unicode labels and identifiers are supported.
+// Capture execution result: erg = <--va--> ... <---->
+// Result object fields: {code: source‑text, erg: return‑value, fehl: error‑message, abnorm: crash‑flag}
+// Programmatic invocation shortcut: va(`...`)
+<--va-->
+; ============================================================================
+; VSE Standard Architecture‑64 (.va) assembly syntax reference
+; Comments start with semicolon
+; Project started: 2026‑08‑24
+; ============================================================================
+; ----------------------------------------------------------------------------
+; Register names (case‑insensitive)
+;   r1  = RAX   r2  = RCX   r3  = RDX   r4  = RBX
+;   r5  = RSP   r6  = RBP   r7  = RSI   r8  = RDI
+;   r9  = R8    r10 = R9    r11 = R10   r12 = R11
+;   r13 = R12   r14 = R13   r15 = R14   r16 = R15
+; ----------------------------------------------------------------------------
+; ---------- Static data definitions ----------
+msg:    db "Hello World!", 0      ; zero‑terminated C‑style string
+puffer: dq 0, 0, 0, 0            ; 32‑byte buffer for memory‑addressing demo
+zahl:   dq 42                    ; 64‑bit integer constant
+hexwer: db 0xFF, 0x0A            ; two raw byte values: 255 and 10
+arr:    dd 1, 2, 3, 4            ; four 32‑bit integer entries
+wort:   dw 0x1234                ; 16‑bit word constant
+; ---------- Program entry‑point label (fixed _start) ----------
+_start:
+    ; ---------- Move / load‑store (der mnemonic) ----------
+    der r1, puffer          ; r1 = runtime memory address of label puffer
+    der r2, 100             ; load immediate constant value into register r2
+    der [r1], r2            ; *(int64*)r1 = r2 ; memory store
+    der r3, [r1]            ; r3 = *(int64*)r1 ; memory load
+    ; Memory operand with offset displacement
+    der r2, 200
+    der [r1+8], r2
+    der r4, [r1+8]          ; r4 = 200
+    ; ---------- Arithmetic instructions ----------
+    add r1, 3               ; r1 += 3
+    sub r4, r2              ; r4 -= r2
+    ink r1                  ; r1++ increment register
+    dek r4                  ; r4-- decrement register
+    ; ---------- Single‑operand multiply ----------
+    mul r4                  ; r1 = r1 * r4; implicit source operand r1; destroys r1, r3 registers
+    ; Note: single‑operand mul uses unsigned multiplication (mul r/m64 hardware). Clobbers r1 and r3.
+    ; ---------- Multi‑operand signed multiply ----------
+    mul r4, r2              ; r4 = r4 * r2          (two‑operand: dest = dest * src)
+    mul r13, r1, 3          ; r13 = r1 * 3          (three‑operand: dest = src1 * src2)
+    mul r14, r1, r2, r4     ; r14 = r1 * r2 * r4    (four+ operand chained‑multiplication)
+    mul r7, r1, r2, 5, r4   ; r7 = r1 * r2 * 5 * r4
+    ; Multi‑operand form uses signed imul instruction; only modifies destination register; r1 / r3 remain untouched.
+    der r3, 0               ; zero r3 (RDX) register
+    ; ---------- Single‑operand unsigned division ----------
+    div r2                  ; r1 = r1 / r2 (quotient), r3 = r1 % r2 (remainder)
+    ; Note: single‑operand div uses unsigned hardware div r/m64. Dividend is combined 128‑bit value r1:r3.
+    ; ---------- Multi‑operand unsigned division ----------
+    div r4, r2                          ; r4 = r4 / r2          (two‑operand; remainder discarded)
+    div r15, r1, r2                     ; r15 = r1 / r2         (three‑operand; remainder discarded)
+    div r16, r7, r1, r2                 ; r16 = r1 / r2         (four‑operand quotient‑output)
+                                        ; r7 = r1 % r2          (four‑operand remainder‑output)
+    ; Multi‑operand div uses unsigned hardware div; divisor saved temporarily on stack.
+    ; Does not clobber arbitrary registers. First argument must be register for quotient output.
+    ; For four‑argument variant, second argument is remainder‑destination and must also be register.
+    ; Divisor operand can be register, 32‑bit immediate constant or memory reference.
+    ; ---------- Bitwise instructions ----------
+    und r1, 0xFF            ; r1 &= 0xFF bitwise AND
+    od  r4, r2              ; r4 |= r2 bitwise OR
+    xod r1, 5               ; r1 ^= 5 bitwise XOR
+    nich r1                 ; r1 = ~r1 bitwise NOT (bitwise negate)
+    ; ---------- Compare instruction (result stored inside r3 register) ----------
+    vgl r1, 10              ; Compare r1 against immediate value 10
+                            ; r3 = 0 (equal), 1(r1 > 10), -1(r1 < 10)
+    ; ---------- Conditional jump instructions ----------
+    spr marke1              ; unconditional absolute jump to label marke1
+    ; All conditional jumps read comparison‑result stored in r3 register. Code below will never execute due to unconditional spr above.
+    sn  marke2              ; jump if r3 == 0 (equal)
+    snn marke3              ; jump if r3 != 0 (not equal)
+    sg  marke4              ; jump if r3 == 1 (greater‑than)
+    sk  marke5              ; jump if r3 == -1 (less‑than)
+    sge marke6              ; jump if r3 >= 0 (greater‑or‑equal)
+    ske marke7              ; jump if r3 <= 0 (less‑or‑equal)
+marke1:
+    ; ---------- Subroutine call / return ----------
+    ruf unterprog           ; call sub‑routine unterprog; push return‑address onto stack
+    ; Execution resumes at next line after gib inside unterprog completes
+    spr ende_s              ; unconditional jump to program exit label, skip remaining code
+unterprog:
+    ; ---------- Stack‑push / pop ----------
+    drk r1                  ; push register r1 value onto call‑stack
+    hol r4                  ; pop stack‑top value into register r4 (now r4 holds old r1 content)
+    gib                     ; return‑from‑subroutine; pops return‑address and resumes caller
+    ; ---------- Software interrupt ----------
+    ; The code block below sits after gib so it is unreachable. Place syscalls inside main flow.
+    der r1, 1               ; syscall function‑code 1 = program exit
+    unt 0x80
+    ; ---------- Print zero‑terminated string ----------
+    zeig msg                ; print null‑terminated string located at address msg
+    ; ---------- Terminate entire VA program ----------
+    ende                    ; exit VA execution context
+; Jump‑target labels (no associated machine‑code, only for branch destinations)
+marke2:
+marke3:
+marke4:
+marke5:
+marke6:
+marke7:
+    ; ---------- Counted loop sample ----------
+    der r1, 0               ; initialize counter register r1 = 0
+schleife:
+    vgl r1, 10              ; compare counter against upper‑bound 10
+    sge ende_s              ; exit loop if r1 >= 10
+    ink r1                  ; increment counter
+    spr schleife            ; jump back to loop start label
+ende_s:
+    ende                    ; program exit point, reachable from any control‑flow path
+    ; ---------- Miscellaneous instructions ----------
+    ugib                    ; interrupt‑return (x86‑64 hardware IRETQ)
+    in  r1, 0x60            ; read byte from IO‑port 0x60 into r1 register
+    erg 0x60, r1            ; write value in r1 register out to IO‑port 0x60
+; ============================================================================
+; Supplementary notes on VA‑64 execution semantics:
+; 1. Program entry label must be _start. Instructions execute top‑down; jumps alter program‑counter PC.
+; 2. Sub‑routines must be invoked via ruf and terminate with gib return.
+;    Main‑program block (_start or top‑level code) must NOT use gib; use ende for termination.
+; 3. Data labels (db/dw/dd/dq) are only for memory‑load / store / address‑of operations.
+;    Cannot be used as jump‑target labels; will trigger "unknown label" parse‑error.
+; 4. Conditional‑jump instructions sn / sg / sk etc depend entirely on r3 value written by vgl compare instruction.
+; 5. Memory‑address syntax: [reg+displacement] or [reg‑displacement]; displacement is signed 64‑bit integer.
+; 6. Literal numeric values accept decimal and 0x‑prefixed hexadecimal; treated as signed 64‑bit integers.
+; 7. Interpreter‑mode unt 0x80 syscall implements function‑code 1 (exit) and function‑code 4 (console print).
+;    Compiled mode (-c exe flag): zeig and ende map directly to WinAPI calls (Windows‑only).
+; ============================================================================
+<---->
+/|
+// Assembly‑mnemonic remapping lookup‑table (Intel‑style to VA‑64 native mnemonics)
+{
+    MOV: der,
+    ADD: add,
+    SUB: sub,
+    MUL: mul,
+    DIV: div,
+    INC: ink,
+    DEC: dek,
+    AND: und,
+    OR: od,
+    XOR: xod,
+    NOT: nich,
+    CMP: vgl,
+    JMP: spr,
+    JZ: sn,
+    JNZ: snn,
+    JG: sg,
+    JL: sk,
+    JGE: sge,
+    JLE: ske,
+    CALL: ruf,
+    RET: gib,
+    PUSH: drk,
+    POP: hol,
+    INT: unt,
+    PRINT: zeig,
+    EXIT: ende,
+    IRET: ugib,
+    IN: in,
+    OUT: erg,
+    
+    DB: db,
+    DW: dw,
+    DD: dd,
+    DQ: dq
+}
+|/
+// ============================================================================
+// End‑of‑documentation marker
+// ============================================================================
+nutz _
+zeig "kernregel!"

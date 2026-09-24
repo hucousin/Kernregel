@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kernregel Language - Feature Overview</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: #1c2333;
+            --border-color: #30363d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-orange: #d29922;
+            --accent-red: #f85149;
+            --accent-purple: #bc8cff;
+            --code-bg: #0d1117;
+            --keyword: #ff7b72;
+            --string: #a5d6ff;
+            --comment: #8b949e;
+            --function: #d2a8ff;
+            --number: #79c0ff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            font-size: 16px;
+        }
+
+        /* Header / Hero */
+        .hero {
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1a1f2e 100%);
+            border-bottom: 1px solid var(--border-color);
+            padding: 80px 20px 60px;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, var(--accent), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 16px;
+            letter-spacing: -1px;
+        }
+
+        .hero .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 650px;
+            margin: 0 auto 30px;
+        }
+
+        .hero .badge {
+            display: inline-block;
+            background: rgba(88, 166, 255, 0.1);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin: 4px;
+        }
+
+        /* Navigation */
+        .nav {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .nav a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .nav a:hover {
+            color: var(--text-primary);
+            background: rgba(88, 166, 255, 0.1);
+        }
+
+        /* Container */
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 40px 20px 80px;
+        }
+
+        /* Section */
+        .section {
+            margin-bottom: 60px;
+        }
+
+        .section h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .section h2 .icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+
+        .icon-blue { background: rgba(88, 166, 255, 0.15); color: var(--accent); }
+        .icon-green { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); }
+        .icon-orange { background: rgba(210, 153, 34, 0.15); color: var(--accent-orange); }
+        .icon-red { background: rgba(248, 81, 73, 0.15); color: var(--accent-red); }
+        .icon-purple { background: rgba(188, 140, 255, 0.15); color: var(--accent-purple); }
+
+        .section p {
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        /* Code blocks */
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+            margin: 16px 0;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        code {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+        }
+
+        .code-block {
+            position: relative;
+        }
+
+        .code-label {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Feature grid */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 24px 0;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 24px;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent);
+        }
+
+        .feature-card h3 {
+            font-size: 1.15rem;
+            margin-bottom: 10px;
+            color: var(--text-primary);
+        }
+
+        .feature-card p {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .feature-card ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-card ul li {
+            padding: 4px 0;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .feature-card ul li::before {
+            content: "\25b8 ";
+            color: var(--accent);
+        }
+
+        /* Syntax highlighting classes */
+        .kw { color: var(--keyword); font-weight: bold; }
+        .str { color: var(--string); }
+        .cmt { color: var(--comment); font-style: italic; }
+        .fn { color: var(--function); }
+        .num { color: var(--number); }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 0.95rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: var(--bg-secondary);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        td {
+            color: var(--text-secondary);
+        }
+
+        td code {
+            background: rgba(88, 166, 255, 0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: var(--accent);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.5rem; }
+            .hero .subtitle { font-size: 1.1rem; }
+            .feature-grid { grid-template-columns: 1fr; }
+            pre { font-size: 0.82rem; padding: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Hero Section -->
+    <header class="hero">
+        <h1>Kernregel</h1>
+        <p class="subtitle">A versatile programming language with German-inspired syntax, supporting interpreter and C++ VM execution modes. Features include classes, pattern matching, calculus, networking, assembly, and more.</p>
+        <div>
+            <span class="badge">v0.0.19xx</span>
+            <span class="badge">C++ VM</span>
+            <span class="badge">Unicode Identifiers</span>
+            <span class="badge">Multi-paradigm</span>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <a href="#overview">Overview</a>
+        <a href="#variables">Variables</a>
+        <a href="#types">Types</a>
+        <a href="#operators">Operators</a>
+        <a href="#control">Control Flow</a>
+        <a href="#functions">Functions</a>
+        <a href="#classes">Classes</a>
+        <a href="#strings">Strings</a>
+        <a href="#arrays">Arrays</a>
+        <a href="#objects">Objects</a>
+        <a href="#math">Math &amp; Calculus</a>
+        <a href="#exceptions">Exceptions</a>
+        <a href="#enums">Enums</a>
+        <a href="#files">Files &amp; I/O</a>
+        <a href="#network">Networking</a>
+        <a href="#cpp">C++ Interop</a>
+        <a href="#assembly">Assembly</a>
+        <a href="#preprocessor">Preprocessor</a>
+    </nav>
+
+    <main class="container">
+
+        <!-- Overview -->
+        <section class="section" id="overview">
+            <h2><span class="icon icon-blue">&#9670;</span> Language Overview</h2>
+            <p>Kernregel (abbreviated as <strong>Kr</strong>) is a multi-paradigm programming language with German-inspired keywords. It supports two execution modes: an interpreter mode and a C++ VM mode. The language supports Unicode characters in function names, variable names, and identifiers. It features a rich set of built-in capabilities including object-oriented programming, functional patterns, calculus operations, database access, HTTP networking, and even inline 64-bit assembly.</p>
+            <p>The language was initiated on 2026-06-28 and is currently at version v0.0.19xx. Note that the VM mode may be less stable than the interpreter mode.</p>
+        </section>
+
+        <!-- Variables -->
+        <section class="section" id="variables">
+            <h2><span class="icon icon-green">&#9670;</span> Variables &amp; Constants</h2>
+            <p>Kernregel supports mutable variables (<code>der</code>), immutable constants (<code>das</code>), lazy variables (<code>faul</code>), aliases (<code>des</code>), and global variables (<code>global</code>). Variables are optionally declared &mdash; assigning a value without a prefix creates a mutable variable in the current scope.</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="kw">der</span> x = <span class="num">10</span>                    <span class="cmt">// mutable variable</span>
+<span class="kw">der</span> zl: <span class="kw">zahl</span> = <span class="num">10</span>               <span class="cmt">// typed variable</span>
+<span class="kw">das</span> π = <span class="num">3.14159</span>                 <span class="cmt">// constant</span>
+<span class="kw">faul</span> lazy = <span class="num">2</span> + <span class="num">3</span>               <span class="cmt">// lazy (evaluated on first access)</span>
+<span class="kw">des</span> m = x                        <span class="cmt">// alias</span>
+<span class="kw">der</span> arr = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>]
+
+x &lt;-&gt; b                          <span class="cmt">// swap two variables</span>
+<span class="kw">global</span> g = <span class="num">1</span>                     <span class="cmt">// global scope</span>
+
+<span class="kw">der</span> link, recht = obj            <span class="cmt">// destructuring assignment</span>
+<span class="kw">der</span> a = <span class="num">1</span>, b = <span class="num">2</span>                 <span class="cmt">// multiple assignment</span></code></pre>
+            </div>
+        </section>
+
+        <!-- Types -->
+        <section class="section" id="types">
+            <h2><span class="icon icon-orange">&#9670;</span> Basic Data Types</h2>
+            <p>Kernregel provides a comprehensive set of built-in types:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>ganzzahl</code> / <code>zahl</code> / <code>gzl</code></td><td>Integer</td><td><code>42</code>, <code>0xFF</code>, <code>0o77</code>, <code>0b1010</code></td></tr>
+                    <tr><td><code>fliesskzl</code> / <code>kzl</code></td><td>Floating point (up to 1024-bit precision)</td><td><code>3.14</code>, <code>1.2e+3</code></td></tr>
+                    <tr><td><code>zkt</code> / <code>Text</code></td><td>String</td><td><code>"Hallo"</code>, <code>u"raw string"</code></td></tr>
+                    <tr><td><code>einz</code></td><td>Single character</td><td><code>'e'</code></td></tr>
+                    <tr><td><code>array</code></td><td>Array / List</td><td><code>[1, 2, 3]</code></td></tr>
+                    <tr><td><code>objekt</code></td><td>Object / Dictionary</td><td><code>{"name": "Max", "alter": 30}</code></td></tr>
+                    <tr><td><code>null</code></td><td>Null value</td><td><code>null</code></td></tr>
+                </tbody>
+            </table>
+            <p>Additional type aliases include <code>lang</code> (big integer), <code>leer</code> (any type). Type annotations are optional but available for variables, function parameters, and return types.</p>
+        </section>
+
+        <!-- Operators -->
+        <section class="section" id="operators">
+            <h2><span class="icon icon-red">&#9670;</span> Operators &amp; Expressions</h2>
+            <p>Kernregel supports a rich set of operators including arithmetic, logical, bitwise, comparison, and pipeline operators:</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="cmt">// Arithmetic</span>
+<span class="num">1</span> + <span class="num">1</span>    <span class="num">1</span> - <span class="num">1</span>    <span class="num">1</span> * <span class="num">1</span>    <span class="num">1</span> / <span class="num">1</span>    <span class="num">10</span> % <span class="num">3</span>    <span class="num">2</span> ^ <span class="num">3</span>    <span class="num">5</span>!    <span class="num">5</span>°
+
+<span class="cmt">// Comparison &amp; Logic</span>
+<span class="num">1</span> > <span class="num">0</span>    <span class="num">1</span> == <span class="num">1</span>    <span class="num">1</span> &lt;=&gt; <span class="num">1</span>    <span class="kw">und</span> (<span class="op">&amp;&amp;</span>)    <span class="kw">od</span> (<span class="op">||</span>)    <span class="kw">nich</span> (<span class="op">!</span>)
+
+<span class="cmt">// Bitwise</span>
+<span class="num">1</span> | <span class="num">2</span>    <span class="num">1</span> &amp; <span class="num">2</span>    <span class="num">1</span> &lt;&lt; <span class="num">2</span>    <span class="num">1</span> &gt;&gt; <span class="num">2</span>    <span class="num">1</span> ~ <span class="num">2</span>    <span class="num">1</span> ~~ <span class="num">2</span>    <span class="num">1</span>!  <span class="cmt">// factorial</span>
+
+<span class="cmt">// Pipeline operator</span>
+cleaned = <span class="str">"  Hallo Welt!  "</span> |<span class="op">&gt;</span> trim() |<span class="op">&gt;</span> ers(<span class="str">/Welt/</span>, <span class="str">"Erde"</span>)
+
+<span class="cmt">// Null coalescing &amp; optional chaining</span>
+result = maybe?.prop ?? <span class="str">"default"</span></code></pre>
+            </div>
+        </section>
+
+        <!-- Control Flow -->
+        <section class="section" id="control">
+            <h2><span class="icon icon-purple">&#9670;</span> Control Flow</h2>
+            <p>Kernregel provides familiar control flow structures with German-inspired keywords. It supports both brace-style and indentation-style syntax (as long as indentation is consistent within a block):</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="cmt">// If / Else If / Else</span>
+<span class="kw">fa</span> x > <span class="num">15</span> {
+    <span class="cmt">// condition true</span>
+} <span class="kw">snfa</span> x == <span class="num">15</span> {
+    <span class="cmt">// else if</span>
+} <span class="kw">sonst</span> {
+    <span class="cmt">// else</span>
+}
+
+<span class="cmt">// While loop</span>
+<span class="kw">indes</span> x > <span class="num">0</span> {
+    x -= <span class="num">1</span>
+}
+
+<span class="cmt">// Do-while loop</span>
+<span class="kw">tu</span> {
+    <span class="fn">zeig</span> <span class="str">"Weiter? (ja/nein): "</span>
+    <span class="fn">lies</span> antwort
+} <span class="kw">indes</span> antwort != <span class="str">"ja"</span>
+
+<span class="cmt">// For loop with range</span>
+<span class="kw">fuer</span> i = <span class="num">0</span>; i &lt; <span class="num">5</span>; i++ {
+    <span class="kw">fa</span> i == <span class="num">2</span> { <span class="kw">weiter</span> }   <span class="cmt">// continue</span>
+    <span class="kw">fa</span> i == <span class="num">3</span> { <span class="kw">bruch</span> }     <span class="cmt">// break</span>
+}
+
+<span class="cmt">// Range iteration</span>
+<span class="kw">fuer</span> i <span class="kw">in</span> <span class="num">0</span>..<span class="num">10</span> <span class="kw">sch</span> <span class="num">2</span> { <span class="cmt">// step by 2</span> }
+
+<span class="cmt">// Foreach over array</span>
+<span class="kw">fuer</span> w <span class="kw">in</span> zahlen { <span class="cmt">// w = each element</span> }
+
+<span class="cmt">// Foreach over object key-value pairs</span>
+<span class="kw">fuer</span> k, w <span class="kw">in</span> obj { <span class="cmt">// k=key, w=value</span> }
+
+<span class="cmt">// Nested loop break/continue with depth</span>
+<span class="kw">fuer</span> i <span class="kw">in</span> <span class="num">1</span>..<span class="num">5</span>
+    <span class="kw">fuer</span> j <span class="kw">in</span> <span class="num">1</span>..<span class="num">4</span>
+        <span class="kw">fa</span> j == <span class="num">2</span> <span class="kw">weiter</span> <span class="num">2</span>   <span class="cmt">// break 2 levels</span>
+        <span class="kw">fa</span> j == <span class="num">3</span> <span class="kw">bruch</span> <span class="num">2</span>       <span class="cmt">// break 2 levels</span></code></pre>
+            </div>
+        </section>
+
+        <!-- Functions -->
+        <section class="section" id="functions">
+            <h2><span class="icon icon-blue">&#9670;</span> Functions</h2>
+            <p>Functions in Kernregel are defined with the <code>fkt</code> keyword. The language supports default parameters, variadic arguments, memoized functions, asynchronous functions, closures, anonymous functions, and function expansion (spread operator):</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="cmt">// Ordinary function with default parameters</span>
+<span class="fn">fkt</span> addiere(a = <span class="num">1</span>, b) {
+    a + b                        <span class="cmt">// last expression is returned</span>
+}
+
+<span class="cmt">// Variadic arguments</span>
+<span class="fn">fkt</span> printf(result, &args) {
+    <span class="cmt">// ...</span>
+}
+
+<span class="cmt">// Memoized function (cached results)</span>
+<span class="op">#</span><span class="fn">fkt</span> fib(n) {
+    <span class="kw">als</span> n {
+        <span class="num">0</span> => { <span class="kw">gib</span> <span class="num">0</span> }
+        <span class="num">1</span> => { <span class="kw">gib</span> <span class="num">1</span> }
+        _ => { <span class="kw">gib</span> fib(n-<span class="num">1</span>) + fib(n-<span class="num">2</span>) }
+    }
+}
+
+<span class="cmt">// Async function</span>
+<span class="kw">ac</span> <span class="fn">fkt</span> fetchData(url) {
+    <span class="kw">gib</span> { <span class="str">"data"</span>: <span class="str">"Ergebnis"</span>, <span class="str">"status"</span>: <span class="num">50</span> }
+}
+future = fetchData(<span class="str">"api"</span>)
+<span class="cmt">// data = warte future</span>
+
+<span class="cmt">// Anonymous function &amp; closure</span>
+verdopple = <span class="fn">fkt</span>(x) { x * <span class="num">2</span> }
+
+<span class="fn">fkt</span> macheZaehler() {
+    z = <span class="num">0</span>
+    <span class="fn">fkt</span> ink_() { z = z + <span class="num">1</span>; <span class="kw">gib</span> z }
+    <span class="kw">gib</span> ink_
+}
+z1 = macheZaehler()
+<span class="cmt">// zeig z1()  -> 1</span>
+<span class="cmt">// zeig z1()  -> 2</span>
+
+<span class="cmt">// Function spread</span>
+args = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]
+f(...args)
+
+<span class="cmt">// Macro</span>
+<span class="fn">makro</span> Makro() { <span class="cmt">// macro body</span> }</code></pre>
+            </div>
+        </section>
+
+        <!-- Classes -->
+        <section class="section" id="classes">
+            <h2><span class="icon icon-green">&#9670;</span> Classes &amp; Objects</h2>
+            <p>Kernregel supports full object-oriented programming with classes, inheritance, access modifiers (<code>oeffent</code> public, <code>privat</code> private, <code>schutz</code> protected), constructors, and static members:</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="kw">klass</span> Tier {
+    <span class="kw">oeffent</span> name: <span class="kw">zkt</span> = <span class="str">"unbekannt"</span>
+    <span class="kw">privat</span> alter: <span class="kw">gzl</span> = <span class="num">0</span>
+    <span class="kw">stati</span> zaehler: <span class="kw">gzl</span> = <span class="num">0</span>
+
+    <span class="kw">konstr</span>(name, alter) {
+        dies.name = name
+        dies.alter = alter
+        zaehler++
+    }
+
+    <span class="fn">fkt</span> sprich() {
+        <span class="cmt">// instance method</span>
+    }
+
+    <span class="kw">stati</span> <span class="fn">fkt</span> getZaehler(): <span class="kw">gzl</span> {
+        <span class="kw">gib</span> zaehler
+    }
+}
+
+<span class="cmt">// Inheritance</span>
+<span class="kw">klass</span> Hund(Tier) {
+    <span class="kw">privat</span> rasse: <span class="kw">zkt</span> = <span class="str">"Mischling"</span>
+
+    <span class="kw">konstr</span>(name, alter, rasse)
+        ober(name, alter)        <span class="cmt">// call parent constructor</span>
+        dies.rasse = rasse
+
+    sprich()                     <span class="cmt">// override parent method</span>
+        <span class="cmt">// zeig dies.name + " bellt!"</span>
+}
+
+tier = Tier(<span class="str">"Allgemein"</span>, <span class="num">5</span>)
+bello = Hund(<span class="str">"Bello"</span>, <span class="num">3</span>, <span class="str">"Schäferhund"</span>)
+bello.sprich()                 <span class="cmt">// "Bello bellt!"</span></code></pre>
+            </div>
+        </section>
+
+        <!-- Strings -->
+        <section class="section" id="strings">
+            <h2><span class="icon icon-orange">&#9670;</span> String Operations</h2>
+            <p>Kernregel provides an extensive set of string manipulation methods, regex support, and powerful string interpolation:</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="cmt">// String methods</span>
+s = <span class="str">"  Hallo Welt!  "</span>
+s.lae(n>()                       <span class="cmt">// character length</span>
+s.trim()                      <span class="cmt">// trim whitespace</span>
+s.hat(<span class="str">"Welt"</span>)                 <span class="cmt">// contains substring</span>
+s.ab(<span class="num">2</span>, <span class="num">6</span>)                     <span class="cmt">// slice [2,6)</span>
+s.gross()                     <span class="cmt">// uppercase</span>
+s.klein()                     <span class="cmt">// lowercase</span>
+s.wieder(<span class="num">3</span>)                   <span class="cmt">// repeat 3 times</span>
+s.ers(<span class="str">/Welt/</span>, <span class="str">"Erde"</span>)         <span class="cmt">// regex replace</span>
+s.teil(/[,，、;]/)              <span class="cmt">// regex split</span>
+
+<span class="cmt">// String interpolation</span>
+name = <span class="str">"Welt"</span>
+<span class="cmt">// zeig "Hallo {name}!"         -> "Hallo Welt!"</span>
+<span class="cmt">// zeig "{n:.2k}"              -> formatted number</span>
+<span class="cmt">// zeig "|{n:<8}|"              -> left-aligned padding</span>
+<span class="cmt">// zeig "{#FFFFFF} Farbe. {#end}" // colored output</span>
+
+<span class="cmt">// Raw strings</span>
+u_Text = u<span class="str">"\nabc{}\t"</span>         <span class="cmt">// no escape, no interpolation</span>
+b_Text = b<span class="str">"\x19\x11"</span>           <span class="cmt">// binary string</span></code></pre>
+            </div>
+        </section>
+
+        <!-- Arrays -->
+        <section class="section" id="arrays">
+            <h2><span class="icon icon-red">&#9670;</span> Array Operations</h2>
+            <p>Arrays in Kernregel are dynamic and come with a rich set of built-in methods including higher-order functions:</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code>arr = [<span class="num">5</span>, <span class="num">2</span>, <span class="num">9</span>, <span class="num">1</span>]
+arr.anf(<span class="num">4</span>)                     <span class="cmt">// append</span>
+arr.sort()                     <span class="cmt">// sort in-place</span>
+arr.unique()                   <span class="cmt">// deduplicate</span>
+arr.teil(<span class="num">1</span>, <span class="num">3</span>)                 <span class="cmt">// slice</span>
+arr.umk()                      <span class="cmt">// reverse in-place</span>
+arr.flach()                    <span class="cmt">// flatten nested arrays</span>
+arr.vereinige([<span class="num">6</span>, <span class="num">7</span>])          <span class="cmt">// merge arrays</span>
+arr.schnitt([<span class="num">1</span>, <span class="num">3</span>, <span class="num">5</span>])         <span class="cmt">// intersection</span>
+arr.differenz([<span class="num">1</span>, <span class="num">3</span>, <span class="num">5</span>])      <span class="cmt">// difference</span>
+arr.mische()                   <span class="cmt">// shuffle</span>
+
+<span class="cmt">// Higher-order functions</span>
+arr.map(<span class="fn">fkt</span>(x) { x * <span class="num">2</span> })           <span class="cmt">// map</span>
+arr.filter(<span class="fn">fkt</span>(x) { x % <span class="num">2</span> == <span class="num">0</span> })   <span class="cmt">// filter</span>
+arr.reduz(<span class="fn">fkt</span>(acc, x) { acc + x }, <span class="num">0</span>) <span class="cmt">// reduce</span>
+arr.zip([<span class="num">10</span>, <span class="num">20</span>, <span class="num">30</span>, <span class="num">40</span>])          <span class="cmt">// zip arrays</span>
+
+<span class="cmt">// List comprehensions</span>
+quadrate = [ i*i <span class="kw">fuer</span> i <span class="kw">in</span> <span class="num">0</span>..<span class="num">5</span> <span class="kw">fa</span> i % <span class="num">2</span> == <span class="num">0</span> ]  <span class="cmt">// [0, 4, 16]</span>
+
+<span class="cmt">// Array spread</span>
+arr2 = [...arr, <span class="num">4</span>, <span class="num">5</span>]  <span class="cmt">// [1,2,3,4,5]</span></code></pre>
+            </div>
+        </section>
+
+        <!-- Objects -->
+        <section class="section" id="objects">
+            <h2><span class="icon icon-purple">&#9670;</span> Object Operations</h2>
+            <p>Objects support property access, spread syntax, default values, and various manipulation methods:</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code>person = { <span class="str">"name"</span>: <span class="str">"Max"</span>, <span class="str">"alter"</span>: <span class="num">30</span>, <span class="str">"beruf"</span>: <span class="str">"Ingenieur"</span> }
+person.alter = <span class="num">31</span>                    <span class="cmt">// property assignment</span>
+person.stadt = <span class="str">"Berlin"</span>              <span class="cmt">// add new property</span>
+
+<span class="cmt">// Object spread</span>
+newPerson = { ...person, <span class="str">"age"</span>: <span class="num">31</span> }
+
+<span class="cmt">// Default values</span>
+std = { <span class="str">"A"</span>: <span class="num">2</span>, <span class="str">"__stdwert"</span>: <span class="num">1</span> }
+
+<span class="cmt">// Object methods</span>
+person.schl()                        <span class="cmt">// get all keys</span>
+person.werts()                       <span class="cmt">// get all values</span>
+person.eintr()                       <span class="cmt">// get all entries</span>
+person.vereinige({ <span class="str">"ort"</span>: <span class="str">"Bonn"</span> })  <span class="cmt">// shallow merge</span>
+person.kopiere()                     <span class="cmt">// shallow copy</span>
+
+<span class="cmt">// Object comprehension</span>
+positive = { k: w <span class="kw">fuer</span> k, w <span class="kw">in</span> original <span class="kw">fa</span> w > <span class="num">0</span> }</code></pre>
+            </div>
+        </section>
+
+        <!-- Math & Calculus -->
+        <section class="section" id="math">
+            <h2><span class="icon icon-blue">&#9670;</span> Math &amp; Calculus</h2>
+            <p>Kernregel includes a powerful mathematical and calculus library with support for derivatives, integrals, equation solving, ODEs, and least-squares fitting:</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="cmt">// Basic math</span>
+wurz(<span class="num">25</span>)             <span class="cmt">// square root -> 5</span>
+btr(-<span class="num">10</span>)             <span class="cmt">// absolute value -> 10</span>
+sin(<span class="num">0</span>)               <span class="cmt">// sine</span>
+cos(<span class="num">0</span>)               <span class="cmt">// cosine</span>
+lg(<span class="num">100</span>)              <span class="cmt">// log base 10</span>
+ln(<span class="num">2.718</span>)            <span class="cmt">// natural log</span>
+zuf()                <span class="cmt">// random number</span>
+setze(<span class="num">42</span>)            <span class="cmt">// set random seed</span>
+
+<span class="cmt">// Derivatives</span>
+<span class="fn">fkt</span> quadrat(x) { <span class="kw">gib</span> x ^ <span class="num">2</span> }
+abl(quadrat, <span class="num">2</span>)       <span class="cmt">// first derivative at x=2 -> ~4.0</span>
+ab2(quadrat, <span class="num">3</span>)       <span class="cmt">// second derivative -> ~2.0</span>
+pabl(summe, [<span class="num">1</span>, <span class="num">2</span>], <span class="num">0</span>) <span class="cmt">// partial derivative</span>
+
+<span class="cmt">// Integrals</span>
+inte(quadrat, <span class="num">0</span>, <span class="num">1</span>)       <span class="cmt">// trapezoidal integral -> ~0.333</span>
+simp(quadrat, <span class="num">0</span>, <span class="num">1</span>, <span class="num">10</span>)   <span class="cmt">// Simpson's rule</span>
+gauss(quadrat, <span class="num">0</span>, <span class="num">1</span>, <span class="num">8</span>)    <span class="cmt">// Gaussian-Legendre integral</span>
+
+<span class="cmt">// Root finding</span>
+nullst(sinx, <span class="num">3</span>, <span class="num">4</span>)        <span class="cmt">// bisection method -> ~3.14159 (pi)</span>
+newton(sinx, <span class="num">3</span>)            <span class="cmt">// Newton's method</span>
+
+<span class="cmt">// ODE solvers</span>
+euler(f_ode, <span class="num">0</span>, <span class="num">1</span>, <span class="num">0.1</span>, <span class="num">10</span>)    <span class="cmt">// Euler method</span>
+rk(f_ode, <span class="num">0</span>, <span class="num">1</span>, <span class="num">0.1</span>, <span class="num">10</span>)       <span class="cmt">// Runge-Kutta RK4</span>
+
+<span class="cmt">// Gradient descent</span>
+gradab(summe, [<span class="num">1</span>, <span class="num">2</span>], <span class="num">0.1</span>, <span class="num">100</span>)  <span class="cmt">// gradient descent optimization</span>
+
+<span class="cmt">// Least squares fitting</span>
+datenpunkte = [{<span class="str">"x"</span>:<span class="num">0</span>,<span class="str">"y"</span>:<span class="num">1</span>}, {<span class="str">"x"</span>:<span class="num">1</span>,<span class="str">"y"</span>:<span class="num">2.1</span>}, {<span class="str">"x"</span>:<span class="num">2</span>,<span class="str">"y"</span>:<span class="num">3.8</span>}, {<span class="str">"x"</span>:<span class="num">3</span>,<span class="str">"y"</span>:<span class="num">4.9</span>}]
+kquad(datenpunkte, <span class="num">1</span>)  <span class="cmt">// linear fit -> [c0, c1]</span>
+kquad(datenpunkte, <span class="num">2</span>)  <span class="cmt">// quadratic fit -> [c0, c1, c2]</span></code></pre>
+            </div>
+        </section>
+
+        <!-- Exceptions -->
+        <section class="section" id="exceptions">
+            <h2><span class="icon icon-green">&#9670;</span> Exception Handling</h2>
+            <p>Kernregel uses a try-catch-finally structure with German keywords:</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="fn">fkt</span> divide(a, b) {
+    <span class="kw">ver</span> {
+        <span class="kw">fa</span> b == <span class="num">0</span> {
+            <span class="kw">dem</span> <span class="str">"Division durch Null"</span>   <span class="cmt">// throw exception</span>
+        } <span class="kw">sonst</span> {
+            <span class="kw">gib</span> a / b
+        }
+    } <span class="kw">den</span> fehler {              <span class="cmt">// catch block</span>
+        <span class="cmt">// zeig "Fehler: " + fehler</span>
+        <span class="kw">gib</span> -<span class="num">1</span>
+    } <span class="kw">die</span> {                     <span class="cmt">// finally block</span>
+        <span class="cmt">// cleanup</span>
+    }
+}
+
+<span class="cmt">// Assertions</span>
+<span class="kw">sicher</span> x > <span class="num">0</span>;
+<span class="kw">sicher</span> (x != <span class="kw">null</span>);</code></pre>
+            </div>
+        </section>
+
+        <!-- Enums -->
+        <section class="section" id="enums">
+            <h2><span class="icon icon-orange">&#9670;</span> Enums &amp; Pattern Matching</h2>
+            <p>Kernregel supports algebraic data types with enums and powerful pattern matching:</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="kw">aufz</span> Option {
+    Einige(wert),              <span class="cmt">// variant with parameter</span>
+    Keine,                     <span class="cmt">// variant without parameter</span>
+    VAL_GZL,
+    VAL_KOMMA,
+    VAL_ARRAY
+}
+
+opt = Einige(<span class="num">42</span>)
+
+<span class="cmt">// Pattern matching</span>
+<span class="kw">als</span> opt {
+    Einige(w) => {
+        <span class="cmt">// zeig "Wert: " + w</span>
+    }
+    Keine => {
+        <span class="cmt">// zeig "Kein Wert"</span>
+    }
+}
+
+<span class="cmt">// Value matching</span>
+<span class="kw">als</span> <span class="num">42</span> {
+    <span class="num">42</span> => { <span class="cmt">// match</span> }
+    _  => { <span class="cmt">// wildcard</span> }
+}
+
+<span class="cmt">// Destructuring match</span>
+<span class="kw">als</span> { <span class="str">"name"</span>: <span class="str">"arisu"</span>, <span class="str">"alter"</span>: <span class="num">1</span> } {
+    { name, alter } => { <span class="cmt">// zeig name + " ist " + alter</span> }
+}</code></pre>
+            </div>
+        </section>
+
+        <!-- Files -->
+        <section class="section" id="files">
+            <h2><span class="icon icon-red">&#9670;</span> File Operations &amp; Database</h2>
+            <p>Kernregel provides file I/O, a built-in key-value database (KDB), JSON parsing, and process execution:</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="cmt">// File I/O</span>
+lese(<span class="str">"input.txt"</span>)                    <span class="cmt">// read file content</span>
+leseBin(<span class="str">"img.png"</span>)                   <span class="cmt">// read binary file</span>
+schrd(<span class="str">"out.txt"</span>, <span class="str">"Hallo"</span>)            <span class="cmt">// write to file</span>
+ausf(<span class="str">"ffplay -nodisp -autoexit audio/1.ogg"</span>)  <span class="cmt">// execute command</span>
+lauf(<span class="str">"C:\\test.exe"</span>, [<span class="str">"--h"</span>])        <span class="cmt">// run program</span>
+
+<span class="cmt">// KDB Database</span>
+daten = ladeKD(<span class="str">"test.kd"</span>)
+eintrag = { id: <span class="num">1001</span>, text: <span class="str">"Alice Schmidt"</span>, daten: bytes(<span class="str">"\x48\x65\x6C\x6C\x6F"</span>) }
+schrKD(daten, eintrag)               <span class="cmt">// write record</span>
+eintrag = daten.hole(<span class="num">1001</span>)           <span class="cmt">// read record</span>
+daten.suche(<span class="str">"Projekt"</span>)              <span class="cmt">// full-text search</span>
+verschlKD(daten, <span class="str">"meinPasswort"</span>)     <span class="cmt">// encrypt database</span>
+
+<span class="cmt">// JSON</span>
+obj = jsonzu(<span class="str">`{"name": "Kernregel", "version": 1.23}`</span>)
+jsonStr = zujson({ name: <span class="str">"Test"</span>, zahl: <span class="num">42</span> })</code></pre>
+            </div>
+        </section>
+
+        <!-- Networking -->
+        <section class="section" id="network">
+            <h2><span class="icon icon-purple">&#9670;</span> Networking &amp; Web Server</h2>
+            <p>Kernregel has built-in HTTP client and server capabilities, supporting synchronous and asynchronous requests, routing, SSE (Server-Sent Events), and more:</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="cmt">// HTTP Client</span>
+<span class="cmt">// Synchronous GET</span>
+erg = ANFR(<span class="str">"GET"</span>, <span class="str">"https://httpbin.org/get"</span>, {
+    kopf: { <span class="str">"User-Agent"</span>: <span class="str">"Kernregel"</span> },
+    zeitgre: <span class="num">5</span>
+})
+
+<span class="cmt">// Synchronous POST</span>
+antwort = ANFR(<span class="str">"POST"</span>, <span class="str">"https://httpbin.org/post"</span>, {
+    daten: <span class="str">"{"name":"test"}"</span>,
+    kopf: { <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span> }
+})
+
+<span class="cmt">// Asynchronous GET</span>
+z = ac_ANFR(<span class="str">"GET"</span>, <span class="str">"https://httpbin.org/get"</span>, { zeitgre: <span class="num">10</span> })
+res = warte z
+
+<span class="cmt">// Web Server</span>
+<span class="fn">fkt</span> handler(anfrage) {
+    fa anfrage.pfad == <span class="str">"/"</span> {
+        gib html(<span class="str">`&lt;h1&gt;Hallo Welt!&lt;/h1&gt;`</span>)
+    }
+    sonst {
+        gib text(<span class="str">"Nicht unterstützt"</span>, <span class="num">405</span>)
+    }
+}
+starteServer(<span class="num">8080</span>, handler)</code></pre>
+            </div>
+        </section>
+
+        <!-- C++ Interop -->
+        <section class="section" id="cpp">
+            <h2><span class="icon icon-blue">&#9670;</span> C++ Interoperability</h2>
+            <p>Kernregel can execute C++ code directly and exchange data with it. The <code>cpp()</code> function compiles and runs C++ code, with support for binding Kr variables and JSON data exchange:</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code>name = <span class="str">"Welt"</span>
+zahlen = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]
+
+c_erg = cpp(<span class="str">`
+#include &lt;iostream&gt;
+int main() {
+    std::string name = KR::get(input, "name").as_string();
+    JSON output;
+    output["gruss"] = "Hallo " + name + "!";
+    std::cout &lt;&lt; output.serialize() &lt;&lt; std::endl;
+    return 0;
+}
+`</span>, {
+    <span class="str">"mode"</span>: <span class="str">"json"</span>,
+    <span class="str">"bind"</span>: { <span class="str">"name"</span>: name, <span class="str">"zahlen"</span>: zahlen },
+    <span class="str">"timeout"</span>: <span class="num">5000</span>
+})
+<span class="fn">zeig</span> c_erg.gruss   <span class="cmt">// "Hallo Welt!"</span>
+<span class="fn">zeig</span> c_erg.summe   <span class="cmt">// 6</span></code></pre>
+            </div>
+        </section>
+
+        <!-- Assembly -->
+        <section class="section" id="assembly">
+            <h2><span class="icon icon-green">&#9670;</span> 64-bit Assembly (VSE)</h2>
+            <p>Kernregel includes a built-in 64-bit assembly language (VSE Standard Architecture) that can be executed directly. It supports registers, arithmetic, bitwise operations, control flow, stack operations, and system calls:</p>
+            <div class="code-block">
+                <span class="code-label">VSE Assembly</span>
+<pre><code>&lt;--va--&gt;
+_start:
+    der r1, <span class="num">42</span>              <span class="cmt">// r1 = 42</span>
+    der r2, <span class="num">100</span>             <span class="cmt">// r2 = 100</span>
+    add r1, r2              <span class="cmt">// r1 = r1 + r2 = 142</span>
+    mul r1, r1, <span class="num">2</span>           <span class="cmt">// r1 = r1 * 2 = 284</span>
+    zeig msg                <span class="cmt">// print string</span>
+    ende                    <span class="cmt">// exit program</span>
+
+msg: db <span class="str">"Hello from Assembly!"</span>, <span class="num">0</span>
+&lt;----&gt;</code></pre>
+            </div>
+        </section>
+
+        <!-- Preprocessor -->
+        <section class="section" id="preprocessor">
+            <h2><span class="icon icon-orange">&#9670;</span> Preprocessor &amp; Lexical Macros</h2>
+            <p>Kernregel features a powerful preprocessor with conditional compilation, macros, platform detection, and lexical aliasing (keyword remapping):</p>
+            <div class="code-block">
+                <span class="code-label">Kr</span>
+<pre><code><span class="cmt">// Conditional compilation</span>
+#<span class="fn">makro</span> DEBUG <span class="num">1</span>
+#<span class="kw">fa</span> DEBUG
+    <span class="fn">zeig</span> <span class="str">"Debug mode"</span>
+#<span class="kw">snfa</span> LINUX
+    <span class="fn">zeig</span> <span class="str">"Running on Linux"</span>
+#<span class="kw">sonst</span>
+    <span class="fn">zeig</span> <span class="str">"Unknown system"</span>
+#<span class="kw">endfa</span>
+
+<span class="cmt">// Macros with parameters</span>
+#<span class="fn">makro</span> ADD(a, b) (a + b)
+#<span class="fn">makro</span> GREET(name) <span class="str">"Hallo "</span> + name + <span class="str">"!"</span>
+
+ergebn = ADD(<span class="num">3</span>, <span class="num">5</span>)           <span class="cmt">// expands to (3 + 5)</span>
+nachricht = GREET(<span class="str">"Anna"</span>)    <span class="cmt">// expands to "Hallo " + "Anna" + "!"</span>
+
+<span class="cmt">// Lexical keyword aliasing</span>
+lexikal {
+    <span class="str">"let"</span>               = <span class="str">"der"</span>
+    <span class="str">"function"</span>          = <span class="str">"fkt"</span>
+    <span class="str">"class"</span>             = <span class="str">"klass"</span>
+    <span class="str">"if"</span>                = <span class="str">"fa"</span>
+}</code></pre>
+            </div>
+        </section>
+
+        <!-- Additional Features -->
+        <section class="section" id="additional">
+            <h2><span class="icon icon-purple">&#9670;</span> Additional Features</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h3>Pointer Operations</h3>
+                    <p>Raw pointers (<code>zgr&lt;T&gt;</code>) and smart pointers (<code>schlau&lt;T&gt;</code>) with manual memory management.</p>
+                    <ul>
+                        <li><code>zgr(value)</code> - create raw pointer</li>
+                        <li><code>schlau(value)</code> - create smart pointer</li>
+                        <li><code>zgrw(ptr)</code> - dereference read</li>
+                        <li><code>zgrs(ptr, value)</code> - dereference write</li>
+                        <li><code>frei(ptr)</code> - free raw pointer</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h3>Type Introspection</h3>
+                    <p>Runtime type checking with <code>typist()</code> and <code>.typ()</code> methods, supporting basic types, arrays, objects, and functions.</p>
+                    <ul>
+                        <li><code>typist(42)</code> -&gt; "gzl"</li>
+                        <li><code>typist("hallo")</code> -&gt; "zkt"</li>
+                        <li><code>typist([1,2])</code> -&gt; "[gzl]"</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h3>Namespace &amp; Modules</h3>
+                    <p>Import modules with <code>imp</code>, create named namespaces with <code>umf</code>, and use <code>nutz</code> to mark symbols as used.</p>
+                    <ul>
+                        <li><code>imp "math.kr" as m</code></li>
+                        <li><code>umf Namensraum { ... }</code></li>
+                        <li><code>nutz x, y</code> (suppress warnings)</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h3>Time &amp; Random</h3>
+                    <p>Built-in time functions (<code>zeit()</code>, <code>datum()</code>, <code>tick()/tock()</code>) and random number generation (<code>zuf()</code>, <code>setze()</code>).</p>
+                    <ul>
+                        <li><code>zeit()</code> - Unix timestamp</li>
+                        <li><code>datum()</code> - date string</li>
+                        <li><code>tick()/tock()</code> - timer</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h3>Input &amp; Output</h3>
+                    <p>Flexible I/O with <code>zeig</code> (print), <code>lies</code> (read), <code>schr</code> (print no newline), and formatted output with <code>format()</code>.</p>
+                    <ul>
+                        <li><code>zeigIn(stdfehl, "error")</code> - stderr</li>
+                        <li><code>lies e mit(/regex/)</code> - read with regex</li>
+                        <li><code>sleep(5)</code> - delay</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h3>Verwirrt Sub-language</h3>
+                    <p>A symbol-based sub-language (<code>&lt;--vw--&gt;</code>) for concise expression-based programming without keywords.</p>
+                    <ul>
+                        <li>Symbol-based syntax</li>
+                        <li>Can call Kr functions/variables</li>
+                        <li>Supports Unicode identifiers</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <p>Kernregel Language - Feature Overview Documentation<br>
+        Project started: 2026-06-28 | Current version: v0.0.19xx</p>
+    </footer>
+
+</body>
+</html>
