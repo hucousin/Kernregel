@@ -883,6 +883,7 @@ zeig "\n Zeilenumbruch; \t Tabulator; \r Wagenrücklauf; \b Backspace; \u Zur vo
 zeig(fkt test2(x) {}(1))        // beliebige Ausdrücke, auch sofort‑aufgerufene anonyme Funktionen
 zeigIn(stderg, "Ergebnis: ", 42)// Standard‑Ausgabe stdout
 zeigIn(stdfehl, "Fehler: Division durch Null") // Fehler‑Ausgabe stderr; kann von der Shell abgefangen werden
+zeigIn(stderg, "", fals)        // Optionaler dritter Parameter, ob aktualisiert wird
 schrIn()
 loesch()                        // gespeicherte Zeile per Nummer löschen; ohne Parameter alle gespeicherten Zeilen des aktuellen Gültigkeitsbereichs löschen
 zeigAlle()                      // alle gespeicherten Zeilen des aktuellen Bereichs ausgeben; optionale Parameter "klar", "global", "z"/"k"; k bedeutet Neu‑Zeichnen, z zeigt Zeilennummern an
