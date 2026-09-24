@@ -1035,6 +1035,7 @@ zeig(fkt test2(x) {}(1))        // 任意表达式(函数立即调用)
 
 zeigIn(stderg, "Ergebnis: ", 42)// 普通输出：到 stdout
 zeigIn(stdfehl, "Fehler: Division durch Null") // 错误输出：到 stderr，可被外部 shell 捕获
+zeigIn(stderg, "", fals)        // 可选第三个参数，是否刷新
 schrIn()
 
 loesch()                        // 删除当前作用域中存储的指定行号的内容；括号中无参数表示清空当前作用域中所有存储的行
